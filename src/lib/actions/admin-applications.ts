@@ -6,7 +6,7 @@ import { AppError } from "@/lib/errors";
 import {
   addApplicationNote, assignApplication, changeApplicationStatus, reviewDocument, type ReviewAction,
 } from "@/lib/services/admin-applications";
-import { createStaffAccount, updateStaffAccount } from "@/lib/services/staff";
+import { createStaffAccount, INVITE_HOURS, resendStaffInvite, updateStaffAccount } from "@/lib/services/staff";
 import { APPLICATION_STATUSES } from "@/lib/applications/labels";
 import type { ApplicationStatus } from "@/generated/prisma/enums";
 
@@ -71,7 +71,14 @@ export async function createStaffAction(_prev: AdminActionState, formData: FormD
       name: str(formData.get("name")), email: str(formData.get("email")), role,
       permissions: formData.getAll("permissions").filter((v): v is string => typeof v === "string"),
     });
-    return res.inviteEmailSent ? "Account created and invitation emailed." : "Account created, but the invitation email could not be sent. Ask them to use \"Forgot password?\".";
+    return res.inviteEmailSent ? "Account created and invitation emailed." : `Account created, but the invitation email could not be sent. Give them this one-time link (valid ${INVITE_HOURS} hours): ${res.inviteLink}`;
+  }, ["/admin/staff"]);
+}
+
+export async function resendInviteAction(userId: string): Promise<AdminActionState> {
+  return run(async (actor) => {
+    const res = await resendStaffInvite(actor, userId);
+    return res.inviteEmailSent ? "Invitation sent again." : `The email could not be sent. Give them this one-time link (valid ${INVITE_HOURS} hours): ${res.inviteLink}`;
   }, ["/admin/staff"]);
 }
 

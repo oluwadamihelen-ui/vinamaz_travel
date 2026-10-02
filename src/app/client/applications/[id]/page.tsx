@@ -14,7 +14,9 @@ import { isTerminal, nextAction } from "@/lib/applications/next-action";
 import { CLIENT_UPLOAD_STATUSES } from "@/lib/applications/status";
 import { requireClientPage } from "@/lib/auth/session";
 import { AppError } from "@/lib/errors";
+import { MessageThread } from "@/components/messages/thread";
 import { getApplicationView } from "@/lib/services/applications";
+import { listMessages, markConversationRead } from "@/lib/services/messages";
 import { listPaymentsForClientApplication } from "@/lib/services/payments";
 import { formatMinor } from "@/lib/payments/amounts";
 import { PAYMENT_STATUS_LABEL, PAYMENT_STATUS_TONE } from "@/lib/applications/labels";
@@ -35,6 +37,8 @@ export default async function ApplicationPage({ params, searchParams }: { params
   const { app, config, answers, steps, slots, currentDocs, progress, history } = view;
   const submitted = (await searchParams).submitted === "1";
   const payments = await listPaymentsForClientApplication(actor, app.id);
+  const messages = app.status === "DRAFT" ? [] : await listMessages(actor, app.id);
+  if (messages.some((m) => !m.mine && !m.readAt)) await markConversationRead(actor, app.id);
   const due = app.status !== "DRAFT" ? payments.find((p) => p.status === "PENDING" || p.status === "FAILED") : undefined;
   const flagged = currentDocs.filter((d) => d.status === "REJECTED" || d.status === "REPLACEMENT_REQUIRED");
   const action = nextAction({ status: app.status, progressPercent: app.progressPercent, documentsToReplace: flagged.map((d) => d.name), paymentDue: due ? `Complete your payment of ${formatMinor(due.amountMinor, due.currency)}${due.kind === "ADDITIONAL" ? ` (${due.description})` : ""}` : null });
@@ -109,6 +113,16 @@ export default async function ApplicationPage({ params, searchParams }: { params
                 })}
               </div>
               {!canUploadAny && app.status !== "DRAFT" && <p className="mt-4 text-sm text-ink-3">Document uploads are closed unless we ask you for an update.</p>}
+            </Card>
+          )}
+          {app.status !== "DRAFT" && (
+            <Card id="messages" className="scroll-mt-24 p-6 sm:p-8">
+              <h2 className="mb-1 text-2xl font-semibold">Messages</h2>
+              <p className="mb-5 text-sm text-ink-3">Ask a question or send an update about this application. Replies appear here and you&rsquo;ll be notified.</p>
+              <MessageThread
+                applicationId={app.id} canSend emptyHint="No messages yet. Start the conversation below."
+                messages={messages.map((m) => ({ id: m.id, body: m.body, senderName: m.senderName, mine: m.mine, createdAt: m.createdAt.toISOString(), isNew: !m.mine && !m.readAt, attachments: m.attachments }))}
+              />
             </Card>
           )}
           <details className="rounded-2xl border border-line bg-white shadow-card">

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Search } from "lucide-react";
+import { CollapsibleFilters } from "@/components/admin/collapsible-filters";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/form";
 import { Badge, Card } from "@/components/ui/misc";
@@ -44,6 +45,7 @@ export default async function AdminApplicationsPage({ searchParams }: { searchPa
       </div>
 
       <Card className="p-4 sm:p-5">
+        <CollapsibleFilters activeCount={[filters.q, filters.country, filters.packageId, filters.status, filters.assignee, filters.from, filters.to].filter(Boolean).length}>
         <form method="get" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" role="search">
           <div className="relative sm:col-span-2">
             <Search className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-ink-3" aria-hidden />
@@ -76,6 +78,7 @@ export default async function AdminApplicationsPage({ searchParams }: { searchPa
             {hasFilters && <Button asChild variant="ghost"><Link href="/admin/applications">Clear</Link></Button>}
           </div>
         </form>
+        </CollapsibleFilters>
       </Card>
 
       {list.items.length === 0 ? (

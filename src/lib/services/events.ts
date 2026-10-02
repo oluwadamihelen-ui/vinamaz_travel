@@ -46,7 +46,7 @@ export async function staffAudience(applicationId: string, permission: Permissio
     where: { isActive: true, OR: [{ role: { in: ["ADMIN", "SUPER_ADMIN"] } }, ...(app?.assignedToId ? [{ id: app.assignedToId }] : [])] },
     select: { id: true, role: true, permissions: true },
   });
-  return users.filter((u) => can({ role: u.role as Role, permissions: u.permissions }, permission)).map((u) => u.id);
+  return users.filter((u) => { const s = { role: u.role as Role, permissions: u.permissions }; return can(s, permission) && can(s, "notifications.view"); }).map((u) => u.id);
 }
 
 async function clientOf(applicationId: string) {

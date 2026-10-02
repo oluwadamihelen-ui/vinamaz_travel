@@ -20,6 +20,7 @@ export const PERMISSIONS = [
   "notifications.view",
   "notifications.manage",
   "settings.manage",
+  "staff.manage",
   "audit.view",
 ] as const;
 

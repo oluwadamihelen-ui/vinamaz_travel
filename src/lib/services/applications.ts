@@ -358,7 +358,7 @@ const ACTIVE_EXCLUDED = ["DRAFT", "APPROVED", "REFUSED", "COMPLETED", "CANCELLED
 /** Everything the dashboard needs in three queries, all scoped to the acting client. */
 export async function getClientDashboard(actor: Actor) {
   requireClient(actor);
-  const [apps, flagged, dues] = await Promise.all([
+  const [apps, flagged, dues, unread] = await Promise.all([
     db.visaApplication.findMany({
       where: { clientId: actor.id }, orderBy: { updatedAt: "desc" }, take: 50,
       select: { id: true, applicationNumber: true, packageName: true, packageCountry: true, status: true, progressPercent: true, updatedAt: true, submittedAt: true },
@@ -372,7 +372,10 @@ export async function getClientDashboard(actor: Actor) {
       where: { clientId: actor.id, status: { in: ["PENDING", "FAILED"] } }, orderBy: { createdAt: "asc" },
       select: { id: true, applicationId: true, kind: true, description: true, amountMinor: true, currency: true },
     }),
+    // Unread replies from Vinamaz, per application.
+    db.applicationMessage.groupBy({ by: ["applicationId"], _count: { _all: true }, where: { senderRole: "STAFF", readAt: null, application: { clientId: actor.id } } }),
   ]);
+  const unreadByApp = new Map(unread.map((u) => [u.applicationId, u._count._all]));
   const dueByApp = new Map<string, (typeof dues)[number]>();
   for (const d of dues) if (!dueByApp.has(d.applicationId)) dueByApp.set(d.applicationId, d);
   const flaggedByApp = new Map<string, typeof flagged>();
@@ -382,7 +385,7 @@ export async function getClientDashboard(actor: Actor) {
     const docs = flaggedByApp.get(a.id) ?? [];
     const due = dueByApp.get(a.id);
     const paymentDue = due && a.status !== "DRAFT" ? `Complete your payment of ${formatMinor(due.amountMinor, due.currency)}${due.kind === "ADDITIONAL" ? ` (${due.description})` : ""}` : null;
-    return { ...a, documentsToReplace: docs, paymentId: due?.id ?? null, action: nextAction({ status: a.status, progressPercent: a.progressPercent, documentsToReplace: docs.map((d) => d.name), paymentDue }) };
+    return { ...a, unreadMessages: unreadByApp.get(a.id) ?? 0, documentsToReplace: docs, paymentId: due?.id ?? null, action: nextAction({ status: a.status, progressPercent: a.progressPercent, documentsToReplace: docs.map((d) => d.name), paymentDue }) };
   });
   const current = items.find((i) => i.action?.urgent) ?? items.find((i) => !isTerminal(i.status)) ?? null;
   return {

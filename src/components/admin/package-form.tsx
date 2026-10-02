@@ -36,6 +36,14 @@ const EMPTY: PackageFormData = {
 
 const QUESTION_TYPES: QuestionType[] = ["TEXT", "TEXTAREA", "DATE", "NUMBER", "SELECT", "MULTI_SELECT", "RADIO", "CHECKBOX", "COUNTRY", "PHONE", "EMAIL", "FILE"];
 const HAS_OPTIONS = ["SELECT", "MULTI_SELECT", "RADIO"];
+const PASSPORT_QUESTIONS: PackageFormData["questions"] = [
+  { label: "Passport number", helpText: "", type: "TEXT", isRequired: true, section: "Passport", condition: null, options: [] },
+  { label: "Country that issued your passport", helpText: "", type: "COUNTRY", isRequired: true, section: "Passport", condition: null, options: [] },
+  { label: "Passport issue date", helpText: "", type: "DATE", isRequired: true, section: "Passport", condition: null, options: [] },
+  { label: "Passport expiry date", helpText: "Many destinations require at least six months' validity from your travel date.", type: "DATE", isRequired: true, section: "Passport", condition: null, options: [] },
+  { label: "Place of issue", helpText: "", type: "TEXT", isRequired: false, section: "Passport", condition: null, options: [] },
+];
+const PASSPORT_DOCUMENT: PackageFormData["documentRequirements"][number] = { name: "Passport data page", description: "A clear scan or photo of the page with your photo and personal details.", isRequired: true, acceptedFormats: ["pdf", "jpg", "png"], maxSizeMb: 10 };
 const lines = (s: string) => s.split("\n").map((l) => l.trim()).filter(Boolean);
 
 function SectionCard({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
@@ -192,7 +200,15 @@ export function PackageForm({ id, initial }: { id: string | null; initial: Packa
           </RowShell>
         ))}
         {err("questions") && <p role="alert" className="text-sm text-danger">{err("questions")?.[0]}</p>}
-        <Button type="button" variant="outline" size="sm" onClick={() => setD((p) => ({ ...p, questions: [...p.questions, { label: "", helpText: "", type: "TEXT", isRequired: false, section: "", condition: null, options: [] }] }))}><Plus className="size-4" />Add question</Button>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="outline" size="sm" onClick={() => setD((p) => ({ ...p, questions: [...p.questions, { label: "", helpText: "", type: "TEXT", isRequired: false, section: "", condition: null, options: [] }] }))}><Plus className="size-4" />Add question</Button>
+          <Button type="button" variant="ghost" size="sm" onClick={() => setD((p) => {
+            const have = new Set(p.questions.map((q) => q.label.trim().toLowerCase()));
+            const questions = [...p.questions, ...PASSPORT_QUESTIONS.filter((q) => !have.has(q.label.toLowerCase()))];
+            const hasDoc = p.documentRequirements.some((r) => r.name.trim().toLowerCase() === PASSPORT_DOCUMENT.name.toLowerCase());
+            return { ...p, questions, documentRequirements: hasDoc ? p.documentRequirements : [...p.documentRequirements, PASSPORT_DOCUMENT] };
+          })}><Plus className="size-4" />Add standard passport questions &amp; document</Button>
+        </div>
       </SectionCard>
 
       <SectionCard title="FAQ, important information & terms">

@@ -12,6 +12,8 @@ import { getAdminApplicationView } from "@/lib/services/admin-applications";
 import { listApplicationPayments } from "@/lib/services/payments";
 import { RequestPaymentForm } from "@/components/admin/payment-actions";
 import { can } from "@/lib/auth/permissions";
+import { MessageThread } from "@/components/messages/thread";
+import { listMessages, markConversationRead } from "@/lib/services/messages";
 import { formatMinor } from "@/lib/payments/amounts";
 import { METHOD_LABEL, PAYMENT_STATUS_LABEL, PAYMENT_STATUS_TONE } from "@/lib/applications/labels";
 import { cn } from "@/lib/utils";
@@ -50,6 +52,10 @@ export default async function AdminApplicationPage({ params, searchParams }: { p
   const awaitingClient = v.currentDocs.filter((d) => d.status === "REJECTED" || d.status === "REPLACEMENT_REQUIRED").length;
   const missingRequired = v.slots.filter((s) => s.isRequired && !v.currentDocs.some((d) => d.requirementKey === s.key)).length;
   const base = `/admin/applications/${app.id}`;
+  const canMsgs = can(actor, "messages.view");
+  const thread = canMsgs && app.status !== "DRAFT" ? await listMessages(actor, app.id) : [];
+  const unreadFromClient = thread.filter((m) => !m.mine && !m.readAt).length;
+  if (tab === "messages" && unreadFromClient > 0) await markConversationRead(actor, app.id);
 
   return (
     <div className="space-y-6">
@@ -76,6 +82,7 @@ export default async function AdminApplicationPage({ params, searchParams }: { p
               <Link href={`${base}?tab=${key}`} aria-current={tab === key ? "page" : undefined}
                 className={cn("flex min-h-11 items-center border-b-2 px-4 text-sm font-medium", tab === key ? "border-brand text-brand" : "border-transparent text-ink-3 hover:text-ink")}>
                 {label}
+                {key === "messages" && unreadFromClient > 0 && tab !== "messages" && <span className="ml-2 rounded-full bg-gold-bright px-1.5 text-xs text-ink">{unreadFromClient}</span>}
                 {key === "documents" && awaitingReview > 0 && <span className="ml-2 rounded-full bg-gold-bright px-1.5 text-xs text-ink">{awaitingReview}</span>}
               </Link>
             </li>
@@ -231,7 +238,18 @@ export default async function AdminApplicationPage({ params, searchParams }: { p
         </Card>
       )}
 
-      {tab === "messages" && <Card className="p-8 text-center text-ink-3">Messaging with the client will be available here in an upcoming release.</Card>}
+      {tab === "messages" && (
+        can(actor, "messages.view") ? (
+          <Card className="p-6 sm:p-8">
+            <h2 className="mb-1 text-xl font-semibold">Messages with {client.name}</h2>
+            <p className="mb-5 text-sm text-ink-3">Visible to the client on their application page. Use internal notes for anything private.</p>
+            <MessageThread
+              applicationId={app.id} canSend={can(actor, "messages.manage") && app.status !== "DRAFT"} emptyHint="No messages yet."
+              messages={thread.map((m) => ({ id: m.id, body: m.body, senderName: m.senderName, mine: m.mine, createdAt: m.createdAt.toISOString(), isNew: !m.mine && !m.readAt, attachments: m.attachments }))}
+            />
+          </Card>
+        ) : <Alert>You don&rsquo;t have permission to view messages.</Alert>
+      )}
 
       {tab === "notes" && (
         <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">

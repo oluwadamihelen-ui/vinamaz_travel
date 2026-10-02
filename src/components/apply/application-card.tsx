@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AlertCircle, ArrowRight, CheckCircle2 } from "lucide-react";
+import { AlertCircle, ArrowRight, CheckCircle2, MessageSquare } from "lucide-react";
 import { Badge, Card } from "@/components/ui/misc";
 import { Button } from "@/components/ui/button";
 import { ProgressBar } from "@/components/apply/progress";
@@ -11,6 +11,7 @@ export interface ApplicationCardData {
   id: string; paymentId?: string | null; applicationNumber: string; packageName: string; packageCountry: string;
   status: ApplicationStatus; progressPercent: number; updatedAt: Date;
   action?: NextAction | null;
+  unreadMessages?: number;
 }
 
 export function actionHref(id: string, target: NextAction["target"], paymentId?: string | null): string {
@@ -58,6 +59,7 @@ export function ApplicationCard({ app, highlight = false }: { app: ApplicationCa
           <Button asChild><Link href={`/client/applications/${app.id}/apply`}>Continue application <ArrowRight className="size-4" /></Link></Button>
         ) : null}
         {!draft && <Button asChild variant="outline"><Link href={`/client/applications/${app.id}`}>View application</Link></Button>}
+        {!draft && (app.unreadMessages ?? 0) > 0 && <Button asChild variant="ghost"><Link href={`/client/applications/${app.id}#messages`}><MessageSquare className="size-4" />{app.unreadMessages} new message{app.unreadMessages === 1 ? "" : "s"}</Link></Button>}
       </div>
     </Card>
   );
