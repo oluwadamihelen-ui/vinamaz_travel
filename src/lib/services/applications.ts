@@ -14,6 +14,7 @@ import { applicantDraftSchema, applicantSchema } from "@/lib/validation/applicat
 import { computePackageCharge, formatMinor } from "@/lib/payments/amounts";
 import { createPaymentRow } from "@/lib/payments/create";
 import { recordAudit } from "./audit";
+import { onApplicationSubmitted } from "./events";
 import { nextApplicationNumber } from "./application-number";
 
 type Tx = Prisma.TransactionClient;
@@ -44,6 +45,19 @@ export async function loadPackageConfig(packageId: string, client: Tx | typeof d
 }
 
 type Config = Awaited<ReturnType<typeof loadPackageConfig>>;
+
+/**
+ * The configuration an application is judged against. Applications started after the snapshot
+ * was introduced carry the questions and document requirements as they were when the client began,
+ * so later package edits can't change what an in-flight application needs. Older rows (no snapshot)
+ * fall back to the live package. Package status always comes from the live package.
+ */
+export async function loadApplicationConfig(app: { packageId: string; configSnapshot: Prisma.JsonValue | null }, client: Tx | typeof db = db): Promise<Config> {
+  const live = await loadPackageConfig(app.packageId, client);
+  const snap = app.configSnapshot as { questions?: QuestionDef[]; docReqs?: DocReqDef[] } | null;
+  if (snap && Array.isArray(snap.questions) && Array.isArray(snap.docReqs)) return { ...live, questions: snap.questions, docReqs: snap.docReqs };
+  return live;
+}
 
 function answersToMap(rows: { questionKey: string; value: Prisma.JsonValue }[]): Answers {
   const out: Answers = {};
@@ -93,10 +107,12 @@ export async function startApplication(actor: Actor, packageSlug: string): Promi
   try {
     const created = await db.$transaction(async (tx) => {
       const applicationNumber = await nextApplicationNumber(tx);
+      const cfg = await loadPackageConfig(pkg.id, tx);
       const app = await tx.visaApplication.create({
         data: {
           applicationNumber, clientId: actor.id, packageId: pkg.id, packageName: pkg.name, packageCountry: pkg.country,
           applicant, currentStep: "details",
+          configSnapshot: { questions: cfg.questions, docReqs: cfg.docReqs } as unknown as Prisma.InputJsonValue,
           statusHistory: { create: { fromStatus: null, toStatus: "DRAFT", changedById: actor.id, note: "Application started" } },
         },
         select: { id: true, applicationNumber: true },
@@ -122,7 +138,7 @@ export async function startApplication(actor: Actor, packageSlug: string): Promi
 export async function getApplicationView(actor: Actor, applicationId: string) {
   const app = await getOwnedApplication(actor, applicationId);
   const [config, answerRows, documents, history] = await Promise.all([
-    loadPackageConfig(app.packageId),
+    loadApplicationConfig(app),
     db.applicationAnswer.findMany({ where: { applicationId: app.id } }),
     db.applicationDocument.findMany({ where: { applicationId: app.id }, orderBy: { createdAt: "desc" } }),
     // Client-facing history only: status + the message written for the client. Internal notes are a separate table.
@@ -162,8 +178,8 @@ export async function listClientApplications(actor: Actor, opts: { take?: number
 // ---------------------------------------------------------------------------
 
 export async function recomputeProgress(tx: Tx | typeof db, applicationId: string, config?: Config) {
-  const app = await tx.visaApplication.findUniqueOrThrow({ where: { id: applicationId }, select: { packageId: true, applicant: true } });
-  const cfg = config ?? (await loadPackageConfig(app.packageId, tx));
+  const app = await tx.visaApplication.findUniqueOrThrow({ where: { id: applicationId }, select: { packageId: true, applicant: true, configSnapshot: true } });
+  const cfg = config ?? (await loadApplicationConfig(app, tx));
   const [answerRows, docs] = await Promise.all([
     tx.applicationAnswer.findMany({ where: { applicationId } }),
     tx.applicationDocument.findMany({ where: { applicationId, isCurrent: true }, select: { requirementKey: true } }),
@@ -203,7 +219,7 @@ export async function saveApplicationStep(
 ): Promise<SaveStepResult> {
   const app = await getOwnedApplication(actor, applicationId);
   assertEditable(app.status);
-  const config = await loadPackageConfig(app.packageId);
+  const config = await loadApplicationConfig(app);
   const answerRows = await db.applicationAnswer.findMany({ where: { applicationId: app.id } });
   const existing = answersToMap(answerRows);
   const slots = documentSlots(config.docReqs, config.questions, existing);
@@ -276,7 +292,7 @@ export async function saveApplicationStep(
 export async function submitApplication(actor: Actor, applicationId: string): Promise<{ applicationNumber: string; paymentId: string | null }> {
   const app = await getOwnedApplication(actor, applicationId);
   if (app.status !== "DRAFT") throw new AppError("This application has already been submitted.", "CONFLICT");
-  const config = await loadPackageConfig(app.packageId);
+  const config = await loadApplicationConfig(app);
   if (config.status !== "ACTIVE") throw new AppError("This package is no longer accepting applications.", "VALIDATION");
 
   const [answerRows, docs] = await Promise.all([
@@ -325,6 +341,8 @@ export async function submitApplication(actor: Actor, applicationId: string): Pr
     }
   });
   await recordAudit({ actorId: actor.id, action: "application.submitted", entityType: "VisaApplication", entityId: app.id, metadata: { applicationNumber: app.applicationNumber } });
+  if (paymentId) await recordAudit({ actorId: actor.id, action: "payment.created", entityType: "Payment", entityId: paymentId, metadata: { applicationId: app.id, kind: "APPLICATION" } });
+  await onApplicationSubmitted(app.id, paymentId);
   return { applicationNumber: app.applicationNumber, paymentId };
 }
 

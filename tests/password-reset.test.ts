@@ -11,7 +11,8 @@ let sent: EmailMessage[] = [];
 beforeEach(async () => {
   await resetDb();
   sent = [];
-  setEmailProviderForTests({ send: async (m) => { sent.push(m); } });
+  // Registration also sends a welcome email; these tests are about reset emails only.
+  setEmailProviderForTests({ send: async (m) => { if (!m.subject.startsWith("Welcome")) sent.push(m); } });
 });
 
 const reg = { name: "Ada Obi", email: "ada@example.com", phone: "+2348030000000", password: "oldpassword123", confirmPassword: "oldpassword123", countryOfResidence: "Nigeria" };

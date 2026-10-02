@@ -1,7 +1,7 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { Readable } from "node:stream";
 import { del, get, put } from "@vercel/blob";
@@ -25,23 +25,67 @@ export interface StoredObject {
   size: number;
 }
 
+export interface StoredHead {
+  size: number;
+  /** First bytes of the object (enough for a magic-number check). */
+  head: Buffer;
+}
+
 export interface PrivateStorage {
+  /** "blob": browsers upload directly with a server-issued token. "local": browsers send bytes to our own route (dev/tests). */
+  readonly mode: "blob" | "local";
   put(key: string, bytes: Buffer, contentType: string): Promise<void>;
+  /** Size and first bytes of a stored object, or null if it doesn't exist. */
+  inspect(key: string): Promise<StoredHead | null>;
   get(key: string): Promise<StoredObject | null>;
   delete(key: string): Promise<void>;
 }
 
 const DOCUMENT_KEY_RE = /^applications\/[a-z0-9]+\/[a-f0-9-]{36}\.(pdf|jpg|png)$/;
 /** Public marketing images (package artwork) share the store but live under their own prefix. */
+const MESSAGE_KEY_RE = /^messages\/[a-z0-9]+\/[a-f0-9-]{36}\.(pdf|jpg|png)$/;
 const PAYMENT_PROOF_KEY_RE = /^payments\/[a-z0-9]+\/[a-f0-9-]{36}\.(pdf|jpg|png)$/;
 export const PACKAGE_IMAGE_KEY_RE = /^package-images\/[a-f0-9-]{36}\.(jpg|png|webp)$/;
 
 function assertKey(key: string) {
-  if (!DOCUMENT_KEY_RE.test(key) && !PAYMENT_PROOF_KEY_RE.test(key) && !PACKAGE_IMAGE_KEY_RE.test(key)) throw new Error("Invalid storage key");
+  if (!DOCUMENT_KEY_RE.test(key) && !PAYMENT_PROOF_KEY_RE.test(key) && !MESSAGE_KEY_RE.test(key) && !PACKAGE_IMAGE_KEY_RE.test(key)) throw new Error("Invalid storage key");
+}
+
+/** Whether a key is one the server may issue for client uploads (never package artwork). */
+export function isClientUploadKey(key: string): boolean {
+  return DOCUMENT_KEY_RE.test(key) || PAYMENT_PROOF_KEY_RE.test(key) || MESSAGE_KEY_RE.test(key);
+}
+
+async function readHead(stream: ReadableStream<Uint8Array>, n: number): Promise<Buffer> {
+  const reader = stream.getReader();
+  const chunks: Buffer[] = [];
+  let have = 0;
+  try {
+    while (have < n) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(Buffer.from(value));
+      have += value.length;
+    }
+  } finally {
+    await reader.cancel().catch(() => undefined);
+  }
+  return Buffer.concat(chunks).subarray(0, n);
+}
+
+export function privateBlobToken(): string | undefined {
+  return process.env.PRIVATE_BLOB_READ_WRITE_TOKEN || process.env.BLOB_READ_WRITE_TOKEN || undefined;
 }
 
 class VercelPrivateStorage implements PrivateStorage {
+  readonly mode = "blob" as const;
   constructor(private readonly token: string) {}
+  async inspect(key: string) {
+    assertKey(key);
+    const res = await get(key, { access: "private", token: this.token, useCache: false });
+    if (!res || res.statusCode !== 200) return null;
+    return { size: res.blob.size, head: await readHead(res.stream, 16) };
+  }
   async put(key: string, bytes: Buffer, contentType: string) {
     assertKey(key);
     await put(key, bytes, { access: "private", token: this.token, contentType, addRandomSuffix: false, allowOverwrite: false });
@@ -59,7 +103,24 @@ class VercelPrivateStorage implements PrivateStorage {
 }
 
 class LocalPrivateStorage implements PrivateStorage {
+  readonly mode = "local" as const;
   constructor(private readonly root: string) {}
+  async inspect(key: string) {
+    const f = this.file(key);
+    try {
+      const s = await stat(f);
+      const fh = await open(f, "r");
+      try {
+        const buf = Buffer.alloc(Math.min(16, s.size));
+        await fh.read(buf, 0, buf.length, 0);
+        return { size: s.size, head: buf };
+      } finally {
+        await fh.close();
+      }
+    } catch {
+      return null;
+    }
+  }
   private file(key: string) {
     assertKey(key);
     const full = path.resolve(this.root, key);

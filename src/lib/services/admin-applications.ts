@@ -9,7 +9,8 @@ import { buildSteps, computeProgress, documentSlots } from "@/lib/applications/e
 import { STATUS_LABEL } from "@/lib/applications/labels";
 import { canTransition, STATUS_TRANSITIONS } from "@/lib/applications/status";
 import { recordAudit } from "./audit";
-import { loadPackageConfig } from "./applications";
+import { onDocumentReplacementRequested, onStatusChanged } from "./events";
+import { loadApplicationConfig } from "./applications";
 
 type Tx = Prisma.TransactionClient;
 
@@ -118,7 +119,7 @@ export async function getAdminApplicationView(actor: Actor, id: string) {
   const app = await getManagedApplication(actor, id, "applications.view");
   const canSeeDocs = can(actor, "documents.view");
   const [config, answerRows, documents, history, notes, client] = await Promise.all([
-    loadPackageConfig(app.packageId),
+    loadApplicationConfig(app),
     db.applicationAnswer.findMany({ where: { applicationId: app.id } }),
     canSeeDocs ? db.applicationDocument.findMany({ where: { applicationId: app.id }, orderBy: { createdAt: "desc" } }) : Promise.resolve([]),
     db.applicationStatusHistory.findMany({ where: { applicationId: app.id }, orderBy: { createdAt: "desc" } }),
@@ -206,6 +207,7 @@ export async function changeApplicationStatus(actor: Actor, id: string, input: S
     actorId: actor.id, action: "application.status_changed", entityType: "VisaApplication", entityId: app.id,
     metadata: { applicationNumber: app.applicationNumber, from, to: input.to, override: !normal },
   });
+  await onStatusChanged(app.id, input.to, note);
 }
 
 // ---------------------------------------------------------------------------
@@ -301,4 +303,5 @@ export async function reviewDocument(actor: Actor, documentId: string, input: { 
     actorId: actor.id, action: AUDIT_ACTION[input.action], entityType: "ApplicationDocument", entityId: doc.id,
     metadata: { applicationId: app.id, applicationNumber: app.applicationNumber, requirementKey: doc.requirementKey, reason },
   });
+  if (needsReason) await onDocumentReplacementRequested(app.id, doc.name, reason, input.action === "request_replacement");
 }

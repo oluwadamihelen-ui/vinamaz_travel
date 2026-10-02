@@ -4,7 +4,12 @@ import { randomUUID } from "node:crypto";
  * Upload validation. Server-side only: type is decided by file CONTENT (magic bytes), not the
  * client-supplied MIME type or extension.
  */
-export const MAX_SERVER_UPLOAD_BYTES = 4 * 1024 * 1024; // Vercel serverless request bodies are capped at ~4.5MB
+/** Files go browser -> private storage directly, so the old ~4.5MB serverless body cap no longer applies. */
+export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
+export const MAX_PROOF_BYTES = 10 * 1024 * 1024;
+export const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+/** Kept for the in-memory path (tests, local direct mode). */
+export const MAX_SERVER_UPLOAD_BYTES = MAX_UPLOAD_BYTES;
 
 export type DocFormat = "pdf" | "jpg" | "png";
 
@@ -30,11 +35,15 @@ export function safeFilename(name: string, format: DocFormat): string {
   return `${stem || "document"}.${format}`;
 }
 
+export function newMessageAttachmentKey(applicationId: string, format: DocFormat): string {
+  return `messages/${applicationId}/${randomUUID()}.${format}`;
+}
+
 export function newStorageKey(applicationId: string, format: DocFormat): string {
   return `applications/${applicationId}/${randomUUID()}.${format}`;
 }
 
 /** Effective size cap in bytes for a requirement: configured limit, never above the server limit. */
 export function effectiveMaxBytes(configuredMb: number): number {
-  return Math.min(configuredMb * 1024 * 1024, MAX_SERVER_UPLOAD_BYTES);
+  return Math.min(configuredMb * 1024 * 1024, MAX_UPLOAD_BYTES);
 }

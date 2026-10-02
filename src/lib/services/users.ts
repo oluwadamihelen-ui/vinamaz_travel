@@ -7,6 +7,7 @@ import { requirePermission, type Actor } from "@/lib/auth/actor";
 import { registerSchema, type RegisterInput } from "@/lib/validation/auth";
 import { isPermission } from "@/lib/auth/permissions";
 import { recordAudit } from "./audit";
+import { onClientRegistered } from "./events";
 
 /** Self-service client registration. Always creates a CLIENT; role cannot be supplied. */
 export async function registerClient(raw: unknown) {
@@ -17,7 +18,7 @@ export async function registerClient(raw: unknown) {
   const input: RegisterInput = parsed.data;
   const passwordHash = await hashPassword(input.password);
   try {
-    return await db.user.create({
+    const created = await db.user.create({
       data: {
         email: input.email,
         name: input.name,
@@ -35,6 +36,8 @@ export async function registerClient(raw: unknown) {
       },
       select: { id: true, email: true, name: true, role: true },
     });
+    await onClientRegistered(created);
+    return created;
   } catch (e) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
       throw new AppError("An account with this email already exists. Try signing in instead.", "CONFLICT", {

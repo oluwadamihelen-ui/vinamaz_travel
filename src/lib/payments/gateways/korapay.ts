@@ -11,6 +11,7 @@ export const korapay: PaymentGateway = {
   method: "KORAPAY",
   label: "Korapay",
   supportsCurrency: (c) => CURRENCIES.includes(c),
+  defaultCurrencies: () => CURRENCIES,
   isConfigured: () => secret().length > 0,
 
   async initialize(i) {

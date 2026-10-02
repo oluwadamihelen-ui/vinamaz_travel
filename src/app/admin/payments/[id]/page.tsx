@@ -1,13 +1,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { CancelPaymentButton, RefundForm, ReviewTransferForm } from "@/components/admin/payment-actions";
+import { CancelPaymentButton, RecheckButton, RefundForm, ResolveHeldForm, ReviewTransferForm } from "@/components/admin/payment-actions";
 import { Alert, Badge, Card } from "@/components/ui/misc";
 import { METHOD_LABEL, PAYMENT_STATUS_LABEL, PAYMENT_STATUS_TONE } from "@/lib/applications/labels";
 import { can } from "@/lib/auth/permissions";
 import { requireStaffPage } from "@/lib/auth/session";
 import { AppError } from "@/lib/errors";
 import { formatMinor } from "@/lib/payments/amounts";
+import { getGateway } from "@/lib/payments/registry";
 import { getAdminPaymentView } from "@/lib/services/payments";
 
 export const metadata: Metadata = { title: "Payment · Admin" };
@@ -30,6 +31,10 @@ export default async function AdminPaymentPage({ params }: { params: Promise<{ i
   const canManage = can(actor, "payments.manage");
   const canRefund = can(actor, "payments.refund");
   const awaitingTransfer = payment.method === "BANK_TRANSFER" && ["PENDING", "PROCESSING"].includes(payment.status);
+  const held = payment.method !== null && payment.method !== "BANK_TRANSFER" && payment.status === "PROCESSING";
+  const gateway = payment.method && payment.method !== "BANK_TRANSFER" ? getGateway(payment.method) : undefined;
+  const gatewayRefund = gateway?.refund && gateway.isConfigured() ? gateway.label : null;
+  const unfinishedOnline = payment.method !== null && payment.method !== "BANK_TRANSFER" && ["PENDING", "FAILED", "PROCESSING"].includes(payment.status);
   const refundable = payment.amountMinor - payment.refundedAmountMinor;
 
   return (
@@ -96,11 +101,13 @@ export default async function AdminPaymentPage({ params }: { params: Promise<{ i
 
         <div className="space-y-6">
           {canManage && awaitingTransfer && <Card className="p-6"><h2 className="mb-4 text-xl font-semibold">Confirm bank transfer</h2><ReviewTransferForm paymentId={payment.id} /></Card>}
+          {canManage && held && <Card className="p-6"><h2 className="mb-1 text-xl font-semibold">Decide on this payment</h2><p className="mb-4 text-sm text-ink-3">The gateway took money, but the amount or currency didn&rsquo;t match what we expected. Check the activity log, then accept it or reject it.</p><ResolveHeldForm paymentId={payment.id} /></Card>}
+          {canManage && unfinishedOnline && <Card className="p-6"><h2 className="mb-3 text-xl font-semibold">Gateway status</h2><RecheckButton paymentId={payment.id} /></Card>}
           {canManage && payment.kind === "ADDITIONAL" && ["PENDING", "FAILED"].includes(payment.status) && <Card className="p-6"><h2 className="mb-3 text-xl font-semibold">Cancel this request</h2><CancelPaymentButton paymentId={payment.id} applicationId={application.id} /></Card>}
           {payment.status === "SUCCESS" || payment.status === "PARTIALLY_REFUNDED" ? (
             <>
               <Card className="p-6"><a className="font-semibold text-brand hover:underline" href={`/api/payments/${payment.id}/receipt`}>Download receipt (PDF)</a></Card>
-              {canRefund ? <Card className="p-6"><h2 className="mb-4 text-xl font-semibold">Record a refund</h2><RefundForm paymentId={payment.id} currency={payment.currency} remaining={formatMinor(refundable, payment.currency)} /></Card> : <Alert>Refunds can only be recorded by someone with refund permission.</Alert>}
+              {canRefund ? <Card className="p-6"><h2 className="mb-4 text-xl font-semibold">Refund</h2><RefundForm paymentId={payment.id} currency={payment.currency} remaining={formatMinor(refundable, payment.currency)} viaGateway={gatewayRefund} /></Card> : <Alert>Refunds can only be recorded by someone with refund permission.</Alert>}
             </>
           ) : null}
         </div>

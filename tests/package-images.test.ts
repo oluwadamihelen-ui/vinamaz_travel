@@ -41,7 +41,7 @@ describe("package images (single private store)", () => {
   it("surfaces storage failures with the real reason", async () => {
     setPrivateStorageForTests({
       put: async () => { throw new Error("Vercel Blob: boom"); },
-      get: async () => null, delete: async () => undefined,
+      mode: "local", inspect: async () => null, get: async () => null, delete: async () => undefined,
     });
     await expect(storePackageImage(file(PNG))).rejects.toThrow(/boom/);
   });

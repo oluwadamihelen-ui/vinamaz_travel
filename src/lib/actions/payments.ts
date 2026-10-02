@@ -5,9 +5,9 @@ import { getActor } from "@/lib/auth/session";
 import { AppError } from "@/lib/errors";
 import { toMinor } from "@/lib/payments/amounts";
 import {
-  cancelPayment, chooseBankTransfer, recordRefund, requestAdditionalPayment, reviewBankTransfer, startGatewayPayment,
+  cancelPayment, chooseBankTransfer, recheckPayment, refundPayment, requestAdditionalPayment, resolveHeldPayment, reviewBankTransfer, startGatewayPayment,
 } from "@/lib/services/payments";
-import { deleteBankAccount, saveBankAccount, setMethodEnabled } from "@/lib/services/payment-settings";
+import { deleteBankAccount, saveBankAccount, setMethodCurrencies, setMethodEnabled } from "@/lib/services/payment-settings";
 import type { PaymentMethod } from "@/generated/prisma/enums";
 
 export interface PayState {
@@ -71,9 +71,27 @@ export async function cancelPaymentAction(paymentId: string, applicationId: stri
 export async function refundAction(paymentId: string, _prev: PayState, formData: FormData): Promise<PayState> {
   const amountMinor = toMinor(str(formData.get("amount")).replace(/,/g, ""));
   return run(async (actor) => {
-    await recordRefund(actor, paymentId, { amountMinor, reason: str(formData.get("reason")) });
-    return { message: "Refund recorded." };
+    const r = await refundPayment(actor, paymentId, { amountMinor, reason: str(formData.get("reason")) });
+    return { message: r.via === "gateway" ? (r.gatewayStatus === "processed" ? "Refund sent through the gateway." : "Refund accepted by the gateway and is being processed.") : "Refund recorded." };
   }, [`/admin/payments/${paymentId}`, "/admin/payments"]);
+}
+
+export async function resolveHeldAction(paymentId: string, action: "approve" | "reject", _prev: PayState, formData: FormData): Promise<PayState> {
+  return run(async (actor) => {
+    await resolveHeldPayment(actor, paymentId, { action, note: str(formData.get("note")) });
+    return { message: action === "approve" ? "Payment accepted as paid." : "Payment rejected. Refund the customer from the gateway dashboard." };
+  }, [`/admin/payments/${paymentId}`, "/admin/payments"]);
+}
+
+export async function recheckPaymentAction(paymentId: string): Promise<PayState> {
+  return run(async (actor) => {
+    const outcome = await recheckPayment(actor, paymentId);
+    return { message: outcome === "success" ? "Gateway confirms the payment." : outcome === "pending" ? "The gateway still shows this payment as unfinished." : outcome === "mismatch" ? "The gateway charge still doesn't match the expected amount." : outcome === "failed" ? "The gateway reports the payment failed." : "We couldn't get an answer from the gateway. Try again shortly." };
+  }, [`/admin/payments/${paymentId}`, "/admin/payments"]);
+}
+
+export async function saveMethodCurrenciesAction(method: PaymentMethod, _prev: PayState, formData: FormData): Promise<PayState> {
+  return run(async (actor) => { await setMethodCurrencies(actor, method, str(formData.get("currencies"))); return { message: "Saved." }; }, ["/admin/settings"]);
 }
 
 export async function toggleMethodAction(method: PaymentMethod, enabled: boolean): Promise<PayState> {

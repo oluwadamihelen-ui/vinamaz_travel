@@ -135,6 +135,6 @@ describe("file helpers", () => {
     expect(safeFilename("My Passport (final)!!.JPG", "jpg")).toBe("My Passport final.jpg");
     expect(safeFilename("", "png")).toBe("document.png");
     expect(effectiveMaxBytes(1)).toBe(1024 * 1024);
-    expect(effectiveMaxBytes(25)).toBe(4 * 1024 * 1024);
+    expect(effectiveMaxBytes(40)).toBe(25 * 1024 * 1024);
   });
 });

@@ -4,7 +4,7 @@ import { useActionState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox, Field, Input, Textarea } from "@/components/ui/form";
 import { Alert } from "@/components/ui/misc";
-import { deleteBankAccountAction, saveBankAccountAction, toggleMethodAction, type PayState } from "@/lib/actions/payments";
+import { deleteBankAccountAction, saveBankAccountAction, saveMethodCurrenciesAction, toggleMethodAction, type PayState } from "@/lib/actions/payments";
 import type { PaymentMethod } from "@/generated/prisma/enums";
 
 const init: PayState = {};
@@ -15,6 +15,19 @@ export function MethodToggle({ method, enabled, disabled }: { method: PaymentMet
     <Button type="button" size="sm" variant={enabled ? "outline" : "primary"} disabled={pending || disabled} onClick={() => start(async () => { await toggleMethodAction(method, !enabled); })}>
       {pending ? "…" : enabled ? "Turn off" : "Turn on"}
     </Button>
+  );
+}
+
+export function MethodCurrenciesForm({ method, currencies, defaults }: { method: PaymentMethod; currencies: string[]; defaults: readonly string[] }) {
+  const [state, action, pending] = useActionState(saveMethodCurrenciesAction.bind(null, method), init);
+  return (
+    <form action={action} className="mt-3 space-y-2">
+      <Field label="Currencies offered" htmlFor={`cur-${method}`} error={state.fieldErrors?.currencies} hint={`Leave blank to use the defaults (${defaults.join(", ")}). Only list currencies enabled on your gateway account.`}>
+        <div className="flex gap-2"><Input id={`cur-${method}`} name="currencies" defaultValue={currencies.join(", ")} placeholder={defaults.join(", ")} /><Button type="submit" size="sm" variant="outline" disabled={pending}>{pending ? "…" : "Save"}</Button></div>
+      </Field>
+      {state.error && <Alert>{state.error}</Alert>}
+      {state.ok && <Alert tone="ok">{state.message}</Alert>}
+    </form>
   );
 }
 

@@ -13,6 +13,7 @@ export const flutterwave: PaymentGateway = {
   method: "FLUTTERWAVE",
   label: "Flutterwave",
   supportsCurrency: (c) => CURRENCIES.includes(c),
+  defaultCurrencies: () => CURRENCIES,
   isConfigured: () => secret().length > 0 && hash().length > 0,
 
   async initialize(i) {
@@ -44,6 +45,17 @@ export const flutterwave: PaymentGateway = {
       currency: typeof data.currency === "string" ? data.currency : null,
       raw: { status: s, processor_response: data.processor_response, payment_type: data.payment_type, id: data.id },
     };
+  },
+
+  async refund(i) {
+    if (!i.gatewayTransactionId || !/^\d+$/.test(i.gatewayTransactionId)) throw new GatewayError("Flutterwave needs the transaction id of the original charge; verify the payment first.");
+    const { status, json } = await gatewayRequest(`${base()}/transactions/${i.gatewayTransactionId}/refund`, { method: "POST", secret: secret(), body: { amount: i.amountMinor / 100 } });
+    const data = asRecord(json.data);
+    if (status >= 400 || json.status !== "success") {
+      throw new GatewayError(`Flutterwave declined the refund${typeof json.message === "string" ? `: ${json.message}` : ""}`, status);
+    }
+    const s = String(data.status ?? "pending");
+    return { status: s === "completed" ? "processed" : "pending", gatewayRefundId: data.id !== undefined ? String(data.id) : null, raw: { status: s, id: data.id } };
   },
 
   checkWebhook(rawBody, headers): WebhookCheck {

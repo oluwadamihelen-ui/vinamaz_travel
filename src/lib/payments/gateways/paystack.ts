@@ -12,6 +12,7 @@ export const paystack: PaymentGateway = {
   method: "PAYSTACK",
   label: "Paystack",
   supportsCurrency: (c) => CURRENCIES.includes(c),
+  defaultCurrencies: () => CURRENCIES,
   isConfigured: () => secret().length > 0,
 
   async initialize(i) {
@@ -39,6 +40,19 @@ export const paystack: PaymentGateway = {
       currency: typeof data.currency === "string" ? data.currency : null,
       raw: { status: s, gateway_response: data.gateway_response, paid_at: data.paid_at, channel: data.channel, id: data.id },
     };
+  },
+
+  async refund(i) {
+    const { status, json } = await gatewayRequest(`${base()}/refund`, {
+      method: "POST", secret: secret(),
+      body: { transaction: i.reference, amount: i.amountMinor, currency: i.currency, merchant_note: i.reason.slice(0, 200) },
+    });
+    const data = asRecord(json.data);
+    if (status >= 400 || json.status !== true) {
+      throw new GatewayError(`Paystack declined the refund${typeof json.message === "string" ? `: ${json.message}` : ""}`, status);
+    }
+    const s = String(data.status ?? "pending");
+    return { status: s === "processed" ? "processed" : "pending", gatewayRefundId: data.id !== undefined ? String(data.id) : null, raw: { status: s, id: data.id } };
   },
 
   checkWebhook(rawBody, headers): WebhookCheck {

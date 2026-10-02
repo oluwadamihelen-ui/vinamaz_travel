@@ -38,7 +38,7 @@ describe("uploadDocument validation", () => {
     const { client, id } = await setup();
     await expect(up(client, id, { bytes: Buffer.from("MZ not a pdf"), filename: "passport.pdf" })).rejects.toThrow(/Unsupported file type/);
     await expect(up(client, id, { bytes: Buffer.alloc(0) })).rejects.toThrow(/empty/);
-    await expect(up(client, id, { bytes: Buffer.concat([PDF, Buffer.alloc(5 * 1024 * 1024)]) })).rejects.toThrow(/too large/);
+    await expect(up(client, id, { bytes: Buffer.concat([PDF, Buffer.alloc(26 * 1024 * 1024)]) })).rejects.toThrow(/too large/);
     await expect(up(client, id, { requirementKey: "../../etc/passwd" })).rejects.toThrow(/not part of this application/);
     expect(await db.applicationDocument.count()).toBe(0);
   });

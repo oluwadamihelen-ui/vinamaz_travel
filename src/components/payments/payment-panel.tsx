@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { Banknote, CheckCircle2, Copy, CreditCard, Download, Landmark, Lock } from "lucide-react";
+import { UploadError, uploadFile } from "@/lib/client/upload";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/form";
 import { Alert, Card } from "@/components/ui/misc";
@@ -69,15 +70,18 @@ export function PaymentPanel(p: Props) {
     const form = new FormData(e.currentTarget);
     const file = form.get("file");
     if (!(file instanceof File) || file.size === 0) return setError("Please choose your transfer receipt (PDF, JPG or PNG).");
-    if (file.size > 4 * 1024 * 1024) return setError("That file is too large. The maximum size is 4MB.");
+    if (file.size > 10 * 1024 * 1024) return setError("That file is too large. The maximum size is 10MB.");
+    const senderName = String(form.get("senderName") ?? "").trim();
+    const transferDate = String(form.get("transferDate") ?? "");
+    if (senderName.length < 2) return setFields({ senderName: ["Enter the name on the account you paid from"] });
+    if (!transferDate) return setFields({ transferDate: ["Enter the date you made the transfer"] });
     setUploading(true);
     try {
-      const res = await fetch(`/api/payments/${p.paymentId}/proof`, { method: "POST", body: form });
-      const json = (await res.json().catch(() => ({}))) as { error?: string; fieldErrors?: Record<string, string[]> };
-      if (!res.ok) { setError(json.error ?? "Your upload failed. Please try again."); setFields(json.fieldErrors ?? {}); }
-      else router.refresh();
-    } catch {
-      setError("Your upload failed. Please check your connection and try again.");
+      await uploadFile({ kind: "PAYMENT_PROOF", paymentId: p.paymentId, file, extra: { senderName, transferDate } });
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Your upload failed. Please try again.");
+      if (err instanceof UploadError && err.fieldErrors) setFields(err.fieldErrors);
     } finally {
       setUploading(false);
     }
@@ -127,7 +131,7 @@ export function PaymentPanel(p: Props) {
             <p className="font-semibold">{p.status === "PROCESSING" ? "Replace your receipt" : "Upload your transfer receipt"}</p>
             <Field label="Name on the account you paid from" htmlFor="senderName" error={fields.senderName}><Input id="senderName" name="senderName" required value={sender} onChange={(e) => setSender(e.target.value)} /></Field>
             <Field label="Date of transfer" htmlFor="transferDate" error={fields.transferDate}><Input id="transferDate" name="transferDate" type="date" required value={date} max={new Date().toISOString().slice(0, 10)} onChange={(e) => setDate(e.target.value)} /></Field>
-            <Field label="Transfer receipt (PDF, JPG or PNG, max 4MB)" htmlFor="file"><input id="file" name="file" type="file" required accept="application/pdf,image/jpeg,image/png" className="block w-full text-sm file:mr-4 file:h-11 file:rounded-full file:border-0 file:bg-ink file:px-5 file:text-sm file:font-medium file:text-white" /></Field>
+            <Field label="Transfer receipt (PDF, JPG or PNG, max 10MB)" htmlFor="file"><input id="file" name="file" type="file" required accept="application/pdf,image/jpeg,image/png" className="block w-full text-sm file:mr-4 file:h-11 file:rounded-full file:border-0 file:bg-ink file:px-5 file:text-sm file:font-medium file:text-white" /></Field>
             <Button type="submit" disabled={uploading}>{uploading ? "Uploading…" : "Submit receipt"}</Button>
           </form>
         </Card>

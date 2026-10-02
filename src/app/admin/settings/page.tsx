@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { BankAccountForm, MethodToggle } from "@/components/admin/settings-forms";
+import { BankAccountForm, MethodCurrenciesForm, MethodToggle } from "@/components/admin/settings-forms";
 import { Badge, Card } from "@/components/ui/misc";
 import { requireStaffPage } from "@/lib/auth/session";
 import { getPaymentSettings } from "@/lib/services/payment-settings";
@@ -31,6 +31,7 @@ export default async function SettingsPage() {
                 <p className="font-semibold">{g.label}</p>
                 <p className="text-xs text-ink-3">Webhook URL: <span className="font-mono">{base}/api/webhooks/{g.method.toLowerCase()}</span></p>
                 {!g.configured && <p className="mt-1 text-xs text-gold">Not configured: set {ENV[g.method]} in Vercel and redeploy.</p>}
+                <MethodCurrenciesForm method={g.method} currencies={g.currencies} defaults={g.defaultCurrencies} />
               </div>
               <div className="flex items-center gap-3">
                 <Badge tone={g.configured && g.enabled ? "ok" : "neutral"}>{!g.configured ? "No keys" : g.enabled ? "Live" : "Switched off"}</Badge>

@@ -13,8 +13,9 @@ export async function getPaymentSettings(actor: Actor) {
   requirePermission(actor, "settings.manage");
   const [methods, banks] = await Promise.all([db.paymentMethodSetting.findMany(), db.bankAccount.findMany({ orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] })]);
   const enabled = new Map(methods.map((m) => [m.method, m.enabled]));
+  const custom = new Map(methods.map((m) => [m.method, m.currencies]));
   return {
-    gateways: GATEWAY_METHODS.map((m) => ({ method: m as PaymentMethod, label: getGateway(m)!.label, configured: getGateway(m)!.isConfigured(), enabled: enabled.get(m) ?? true })),
+    gateways: GATEWAY_METHODS.map((m) => ({ method: m as PaymentMethod, label: getGateway(m)!.label, configured: getGateway(m)!.isConfigured(), enabled: enabled.get(m) ?? true, currencies: custom.get(m) ?? [], defaultCurrencies: getGateway(m)!.defaultCurrencies() })),
     bankTransferEnabled: enabled.get("BANK_TRANSFER") ?? true,
     banks,
   };
@@ -24,6 +25,16 @@ export async function setMethodEnabled(actor: Actor, method: PaymentMethod, enab
   requirePermission(actor, "settings.manage");
   await db.paymentMethodSetting.upsert({ where: { method }, create: { method, enabled }, update: { enabled } });
   await recordAudit({ actorId: actor.id, action: "settings.payment_method_changed", entityType: "PaymentMethodSetting", entityId: method, metadata: { enabled } });
+}
+
+/** Currencies a gateway may be offered for. Empty list = the built-in defaults. */
+export async function setMethodCurrencies(actor: Actor, method: PaymentMethod, raw: string) {
+  requirePermission(actor, "settings.manage");
+  if (method === "BANK_TRANSFER") throw new AppError("Bank transfer currencies come from the bank accounts you add.", "VALIDATION");
+  const list = [...new Set(raw.split(/[\s,;]+/).map((c) => c.trim().toUpperCase()).filter(Boolean))];
+  if (list.some((c) => !/^[A-Z]{3}$/.test(c)) || list.length > 20) throw new AppError("Use 3-letter currency codes separated by commas, e.g. NGN, USD.", "VALIDATION", { currencies: ["Invalid currency list"] });
+  await db.paymentMethodSetting.upsert({ where: { method }, create: { method, currencies: list }, update: { currencies: list } });
+  await recordAudit({ actorId: actor.id, action: "settings.payment_currencies_changed", entityType: "PaymentMethodSetting", entityId: method, metadata: { currencies: list } });
 }
 
 export interface BankAccountInput { bankName: string; accountName: string; accountNumber: string; currency: string; instructions?: string; isActive: boolean }

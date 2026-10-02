@@ -49,3 +49,97 @@ export function paymentSuccessEmail(opts: { name: string; reference: string; amo
   const text = `Hi ${first},\n\nWe've received your payment of ${opts.amount} (reference ${opts.reference}) for application ${opts.applicationNumber} (${opts.packageName}).\n\nView your receipt: ${opts.link}\n\nVinamaz Travels`;
   return { subject: `Payment received · ${opts.reference}`, html, text };
 }
+
+// ---------------------------------------------------------------------------
+// Phase 5: application, payment and message emails. One shared builder keeps the look consistent.
+// ---------------------------------------------------------------------------
+
+interface NoticeOptions {
+  name: string;
+  subject: string;
+  heading: string;
+  /** Plain paragraphs (escaped). */
+  paragraphs: string[];
+  /** Optional key/value rows. */
+  details?: [string, string][];
+  cta?: { label: string; link: string };
+  footnote?: string;
+}
+
+function notice(o: NoticeOptions) {
+  const first = o.name.split(" ")[0] || "there";
+  const rows = o.details?.length
+    ? `<table style="font-size:14px;line-height:1.8;margin:12px 0">${o.details.map(([k, v]) => `<tr><td style="color:#665557;padding-right:16px;vertical-align:top">${esc(k)}</td><td><strong>${esc(v)}</strong></td></tr>`).join("")}</table>`
+    : "";
+  const html = layout(
+    o.heading,
+    `<p style="font-size:15px;line-height:1.6">Hi ${esc(first)},</p>${o.paragraphs.map((p) => `<p style="font-size:15px;line-height:1.6">${esc(p)}</p>`).join("")}${rows}${
+      o.cta ? `<p style="margin:24px 0"><a href="${esc(o.cta.link)}" style="background:#b01012;color:#fff;padding:14px 26px;border-radius:999px;text-decoration:none;font-weight:600;display:inline-block">${esc(o.cta.label)}</a></p>` : ""
+    }${o.footnote ? `<p style="font-size:13px;line-height:1.6;color:#665557">${esc(o.footnote)}</p>` : ""}`,
+  );
+  const text = [`Hi ${first},`, "", ...o.paragraphs, ...(o.details ?? []).map(([k, v]) => `${k}: ${v}`), ...(o.cta ? ["", `${o.cta.label}: ${o.cta.link}`] : []), ...(o.footnote ? ["", o.footnote] : []), "", "Vinamaz Travels"].join("\n");
+  return { subject: o.subject, html, text };
+}
+
+export const welcomeEmail = (o: { name: string; link: string }) =>
+  notice({
+    name: o.name, subject: "Welcome to Vinamaz Travels", heading: "Welcome to Vinamaz Travels",
+    paragraphs: ["Your account is ready. You can browse our visa assistance packages, start an application and follow every step from your dashboard.", "We provide application support and guidance. We are not a government agency, and the decision on any visa always rests with the relevant authority."],
+    cta: { label: "Go to my dashboard", link: o.link },
+  });
+
+export const applicationSubmittedEmail = (o: { name: string; applicationNumber: string; packageName: string; link: string; paymentDue: boolean }) =>
+  notice({
+    name: o.name, subject: `Application received · ${o.applicationNumber}`, heading: "We've received your application",
+    paragraphs: o.paymentDue ? ["Thank you for submitting your application. The next step is to complete payment so our team can begin reviewing it."] : ["Thank you for submitting your application. Our team will review it and be in touch if anything else is needed."],
+    details: [["Application", o.applicationNumber], ["Package", o.packageName]],
+    cta: { label: o.paymentDue ? "Continue to payment" : "View my application", link: o.link },
+  });
+
+export const paymentFailedEmail = (o: { name: string; reference: string; amount: string; applicationNumber: string; reason: string | null; link: string }) =>
+  notice({
+    name: o.name, subject: `Payment unsuccessful · ${o.reference}`, heading: "Your payment didn't go through",
+    paragraphs: ["We weren't able to confirm this payment. You have not been charged for anything we haven't confirmed, and you can try again at any time.", ...(o.reason ? [`Reason given: ${o.reason}`] : [])],
+    details: [["Amount", o.amount], ["Reference", o.reference], ["Application", o.applicationNumber]],
+    cta: { label: "Try again", link: o.link },
+  });
+
+export const documentReplacementEmail = (o: { name: string; applicationNumber: string; documentName: string; reason: string | null; replacement: boolean; link: string }) =>
+  notice({
+    name: o.name, subject: `Action needed: ${o.documentName} · ${o.applicationNumber}`, heading: "We need a new document",
+    paragraphs: [`Our team reviewed your ${o.documentName} and ${o.replacement ? "need you to upload a replacement" : "couldn't accept it as submitted"}.`, ...(o.reason ? [`Note from our team: ${o.reason}`] : []), "Please upload a clear, complete copy so we can continue with your application."],
+    details: [["Application", o.applicationNumber], ["Document", o.documentName]],
+    cta: { label: "Upload document", link: o.link },
+  });
+
+export const additionalInfoEmail = (o: { name: string; applicationNumber: string; note: string | null; link: string }) =>
+  notice({
+    name: o.name, subject: `More information needed · ${o.applicationNumber}`, heading: "We need a little more information",
+    paragraphs: ["To keep your application moving, our team needs some additional information from you.", ...(o.note ? [`Note from our team: ${o.note}`] : [])],
+    details: [["Application", o.applicationNumber]],
+    cta: { label: "View my application", link: o.link },
+  });
+
+export const statusChangedEmail = (o: { name: string; applicationNumber: string; statusLabel: string; note: string | null; link: string }) =>
+  notice({
+    name: o.name, subject: `Application update · ${o.applicationNumber}`, heading: "Your application has been updated",
+    paragraphs: [`The status of your application is now "${o.statusLabel}".`, ...(o.note ? [`Note from our team: ${o.note}`] : [])],
+    details: [["Application", o.applicationNumber], ["Status", o.statusLabel]],
+    cta: { label: "View my application", link: o.link },
+  });
+
+export const applicationCompletedEmail = (o: { name: string; applicationNumber: string; packageName: string; link: string }) =>
+  notice({
+    name: o.name, subject: `Application completed · ${o.applicationNumber}`, heading: "Your application is complete",
+    paragraphs: ["We've completed our work on your application. Thank you for trusting Vinamaz Travels with it. Your messages, documents and receipts stay available in your dashboard."],
+    details: [["Application", o.applicationNumber], ["Package", o.packageName]],
+    cta: { label: "View my application", link: o.link },
+  });
+
+export const newMessageEmail = (o: { name: string; applicationNumber: string; senderLabel: string; preview: string; link: string; staff: boolean }) =>
+  notice({
+    name: o.name, subject: `New message about ${o.applicationNumber}`, heading: "You have a new message",
+    paragraphs: [`${o.senderLabel} sent a message about application ${o.applicationNumber}.`, ...(o.preview ? [`"${o.preview}"`] : [])],
+    cta: { label: "Read and reply", link: o.link },
+    footnote: "For your security, messages and documents are only shown after you sign in.",
+  });

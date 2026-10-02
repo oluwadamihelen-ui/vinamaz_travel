@@ -39,12 +39,31 @@ export interface WebhookCheck {
   event?: WebhookEvent;
 }
 
+export interface GatewayRefundInput {
+  /** Our reference that was sent to the gateway when the charge was created. */
+  reference: string;
+  /** The gateway's own transaction id, taken from the verified charge (needed by Flutterwave). */
+  gatewayTransactionId: string | null;
+  amountMinor: number;
+  currency: string;
+  reason: string;
+}
+
+export interface GatewayRefundResult {
+  /** "pending" = accepted by the gateway and being processed. */
+  status: "pending" | "processed";
+  gatewayRefundId: string | null;
+  raw: unknown;
+}
+
 /** Everything the payment service needs from a provider. Providers are interchangeable behind this. */
 export interface PaymentGateway {
   readonly method: GatewayMethod;
   readonly label: string;
   /** Currencies we are willing to offer this gateway for. */
   supportsCurrency(currency: string): boolean;
+  /** The built-in currency list (shown in settings so an administrator can override it). */
+  defaultCurrencies(): readonly string[];
   /** True when the required secrets are present in the environment. */
   isConfigured(): boolean;
   initialize(input: GatewayInitInput): Promise<GatewayInitResult>;
@@ -52,6 +71,8 @@ export interface PaymentGateway {
   verify(reference: string): Promise<GatewayVerifyResult>;
   /** Check the webhook's authenticity and extract the event. Never trust the body before `valid` is true. */
   checkWebhook(rawBody: string, headers: Headers): WebhookCheck;
+  /** Optional: ask the gateway to send money back. Gateways without this are record-only. */
+  refund?(input: GatewayRefundInput): Promise<GatewayRefundResult>;
 }
 
 export class GatewayError extends Error {

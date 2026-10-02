@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { CheckCircle2, FileText, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/misc";
+import { uploadFile } from "@/lib/client/upload";
 import { DOC_STATUS_LABEL, DOC_STATUS_TONE } from "@/lib/applications/labels";
 import type { DocumentStatus } from "@/generated/prisma/enums";
 
@@ -17,58 +18,30 @@ export interface SlotProps {
   error?: string;
 }
 
-const SERVER_LIMIT_MB = 4;
-
-/** Downscale large phone photos so they fit the upload limit; PDFs and small images pass through untouched. */
-async function prepare(file: File): Promise<File> {
-  if (!/^image\/(jpeg|png)$/.test(file.type) || file.size < 1.5 * 1024 * 1024) return file;
-  try {
-    const bitmap = await createImageBitmap(file);
-    const scale = Math.min(1, 2400 / Math.max(bitmap.width, bitmap.height));
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.round(bitmap.width * scale);
-    canvas.height = Math.round(bitmap.height * scale);
-    canvas.getContext("2d")!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-    const blob: Blob | null = await new Promise((res) => canvas.toBlob(res, "image/jpeg", 0.85));
-    if (!blob || blob.size >= file.size) return file;
-    return new File([blob], file.name.replace(/\.[^.]+$/, "") + ".jpg", { type: "image/jpeg" });
-  } catch {
-    return file;
-  }
-}
-
 export function DocumentSlot({ applicationId, slot, current, canUpload, error }: SlotProps) {
   const router = useRouter();
   const input = useRef<HTMLInputElement>(null);
   const [progress, setProgress] = useState<number | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const limit = Math.min(slot.maxSizeMb, SERVER_LIMIT_MB);
+  const limit = slot.maxSizeMb;
   const approved = current?.status === "APPROVED";
 
-  async function upload(original: File) {
+  async function upload(file: File) {
     setMessage(null);
-    const file = await prepare(original);
-    if (file.size > limit * 1024 * 1024) {
-      setMessage(`That file is too large. The maximum size is ${limit}MB.`);
+    if (file.size > slot.maxSizeMb * 1024 * 1024) {
+      setMessage(`That file is too large. The maximum size is ${slot.maxSizeMb}MB.`);
       return;
     }
-    const body = new FormData();
-    body.set("requirementKey", slot.key);
-    body.set("file", file);
     setProgress(0);
-    const xhr = new XMLHttpRequest();
-    xhr.open("POST", `/api/applications/${applicationId}/documents`);
-    xhr.upload.onprogress = (e) => e.lengthComputable && setProgress(Math.round((e.loaded / e.total) * 100));
-    xhr.onload = () => {
+    try {
+      await uploadFile({ kind: "DOCUMENT", applicationId, requirementKey: slot.key, file, onProgress: setProgress });
+      router.refresh();
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : "Your document upload failed. Please try again.");
+    } finally {
       setProgress(null);
-      let res: { error?: string } = {};
-      try { res = JSON.parse(xhr.responseText); } catch { /* ignore */ }
-      if (xhr.status >= 200 && xhr.status < 300) router.refresh();
-      else setMessage(res.error ?? "Your document upload failed. Please try again.");
-    };
-    xhr.onerror = () => { setProgress(null); setMessage("Your document upload failed. Please check your connection and try again."); };
-    xhr.send(body);
-    if (input.current) input.current.value = "";
+      if (input.current) input.current.value = "";
+    }
   }
 
   return (

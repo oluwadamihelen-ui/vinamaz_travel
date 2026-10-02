@@ -1,11 +1,11 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Textarea } from "@/components/ui/form";
 import { Alert } from "@/components/ui/misc";
 import {
-  cancelPaymentAction, refundAction, requestExtraPaymentAction, reviewTransferAction, type PayState,
+  cancelPaymentAction, recheckPaymentAction, refundAction, requestExtraPaymentAction, resolveHeldAction, reviewTransferAction, type PayState,
 } from "@/lib/actions/payments";
 
 const init: PayState = {};
@@ -36,15 +36,42 @@ export function ReviewTransferForm({ paymentId }: { paymentId: string }) {
   );
 }
 
-export function RefundForm({ paymentId, currency, remaining }: { paymentId: string; currency: string; remaining: string }) {
+export function ResolveHeldForm({ paymentId }: { paymentId: string }) {
+  const [aState, approve, aPending] = useActionState(resolveHeldAction.bind(null, paymentId, "approve"), init);
+  const [rState, reject, rPending] = useActionState(resolveHeldAction.bind(null, paymentId, "reject"), init);
+  const state = rState.error || rState.ok ? rState : aState;
+  return (
+    <form className="space-y-3">
+      <Feedback s={state} />
+      <Field label="Reason for your decision (kept in the audit log)" htmlFor="held-note" error={state.fieldErrors?.note}><Textarea id="held-note" name="note" className="min-h-20" required maxLength={500} /></Field>
+      <div className="flex flex-wrap gap-2">
+        <Button type="submit" formAction={approve} disabled={aPending || rPending}>{aPending ? "Accepting…" : "Accept as paid"}</Button>
+        <Button type="submit" variant="danger" formAction={reject} disabled={aPending || rPending}>{rPending ? "Rejecting…" : "Reject (refund the customer)"}</Button>
+      </div>
+    </form>
+  );
+}
+
+export function RecheckButton({ paymentId }: { paymentId: string }) {
+  const [pending, start] = useTransition();
+  const [state, setState] = useState<PayState>({});
+  return (
+    <div className="space-y-2">
+      <Feedback s={state} />
+      <Button type="button" variant="outline" size="sm" disabled={pending} onClick={() => start(async () => setState(await recheckPaymentAction(paymentId)))}>{pending ? "Asking the gateway…" : "Re-check with gateway"}</Button>
+    </div>
+  );
+}
+
+export function RefundForm({ paymentId, currency, remaining, viaGateway }: { paymentId: string; currency: string; remaining: string; viaGateway?: string | null }) {
   const [state, action, pending] = useActionState(refundAction.bind(null, paymentId), init);
   return (
     <form key={state.ok ? "done" : "form"} action={action} className="space-y-3">
       <Feedback s={state} />
-      <p className="text-sm text-ink-3">This <strong>records</strong> a refund. Send the money from your gateway dashboard or bank first. Refundable: {remaining}.</p>
+      <p className="text-sm text-ink-3">{viaGateway ? <>This refunds through <strong>{viaGateway}</strong> and records it here.</> : <>This <strong>records</strong> a refund. Send the money from your bank first.</>} Refundable: {remaining}.</p>
       <Field label={`Amount (${currency})`} htmlFor="refund-amount" error={state.fieldErrors?.amount}><Input id="refund-amount" name="amount" inputMode="decimal" required /></Field>
       <Field label="Reason" htmlFor="refund-reason" error={state.fieldErrors?.reason}><Textarea id="refund-reason" name="reason" className="min-h-20" required maxLength={500} /></Field>
-      <Button type="submit" variant="danger" disabled={pending}>{pending ? "Recording…" : "Record refund"}</Button>
+      <Button type="submit" variant="danger" disabled={pending}>{pending ? "Working…" : viaGateway ? "Refund through gateway" : "Record refund"}</Button>
     </form>
   );
 }

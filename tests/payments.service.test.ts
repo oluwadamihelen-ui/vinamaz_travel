@@ -39,7 +39,8 @@ beforeEach(async () => {
   await resetDb();
   sent = [];
   verifyBehaviour = () => ({ status: "ongoing" });
-  setEmailProviderForTests({ send: async (m) => { sent.push(m); } });
+  // Lifecycle emails (welcome, application received) have their own tests; here we track payment emails.
+  setEmailProviderForTests({ send: async (m) => { if (!/^(Welcome|Application received)/.test(m.subject)) sent.push(m); } });
   fakeGateways();
 });
 afterEach(() => setFetchForTests(undefined));
@@ -331,7 +332,7 @@ describe("manual bank transfer", () => {
     await expect(submitTransferProof(w.clientA, w.paymentA.id, proof({ transferDate: "2999-01-01" }))).rejects.toMatchObject({ fieldErrors: { transferDate: expect.any(Array) } });
     await expect(submitTransferProof(w.clientA, w.paymentA.id, proof({ transferDate: "not-a-date" }))).rejects.toMatchObject({ code: "VALIDATION" });
     await expect(submitTransferProof(w.clientA, w.paymentA.id, proof({ bytes: Buffer.from("MZ not a receipt") }))).rejects.toThrow(/Unsupported file type/);
-    await expect(submitTransferProof(w.clientA, w.paymentA.id, proof({ bytes: Buffer.concat([PDF, Buffer.alloc(5 * 1024 * 1024)]) }))).rejects.toThrow(/too large/);
+    await expect(submitTransferProof(w.clientA, w.paymentA.id, proof({ bytes: Buffer.concat([PDF, Buffer.alloc(11 * 1024 * 1024)]) }))).rejects.toThrow(/too large/);
     await expect(submitTransferProof(w.clientA, w.paymentA.id, proof({ bytes: Buffer.alloc(0) }))).rejects.toThrow(/empty/);
     expect((await reload(w.paymentA.id)).proofStorageKey).toBeNull();
   });
@@ -450,9 +451,9 @@ describe("refunds", () => {
   });
   it("concurrent refunds can never exceed the amount paid", async () => {
     const w = await paid();
-    const results = await Promise.allSettled(Array.from({ length: 4 }, () => recordRefund(w.root, w.paymentA.id, { amountMinor: 6_000_000, reason: "Race" })));
+    const results = await Promise.allSettled(Array.from({ length: 4 }, () => recordRefund(w.root, w.paymentA.id, { amountMinor: 9_000_000, reason: "Race" })));
     expect(results.filter((r) => r.status === "fulfilled").length).toBe(1);
-    expect((await reload(w.paymentA.id)).refundedAmountMinor).toBe(6_000_000);
+    expect((await reload(w.paymentA.id)).refundedAmountMinor).toBe(9_000_000);
   });
   it("unpaid payments can't be refunded", async () => {
     const w = await world();

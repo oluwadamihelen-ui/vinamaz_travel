@@ -4,9 +4,7 @@ import type { PaymentMethod, PaymentStatus } from "@/generated/prisma/enums";
 import { db } from "@/lib/db";
 import { AppError } from "@/lib/errors";
 import { requireClient, requirePermission, type Actor } from "@/lib/auth/actor";
-import { sendEmailSafely } from "@/lib/email/provider";
-import { paymentSuccessEmail } from "@/lib/email/templates";
-import { MIME_BY_FORMAT, MAX_SERVER_UPLOAD_BYTES, safeFilename, sniffFormat } from "@/lib/applications/files";
+import { MIME_BY_FORMAT, MAX_PROOF_BYTES, safeFilename, sniffFormat, type DocFormat } from "@/lib/applications/files";
 import { rateLimit } from "@/lib/rate-limit";
 import { formatMinor, type LineItem } from "@/lib/payments/amounts";
 import { createPaymentRow } from "@/lib/payments/create";
@@ -15,6 +13,7 @@ import type { GatewayMethod } from "@/lib/payments/types";
 import { getPrivateStorage, newPaymentProofKey } from "@/lib/storage/private-documents";
 import { applicationScope } from "./admin-applications";
 import { recordAudit } from "./audit";
+import { notifyUsers, onPaymentFailed, onPaymentNeedsReview, onPaymentSucceeded, onProofSubmitted } from "./events";
 
 const OPEN: PaymentStatus[] = ["PENDING", "FAILED", "CANCELLED"];
 const PAID: PaymentStatus[] = ["SUCCESS", "REFUNDED", "PARTIALLY_REFUNDED"];
@@ -33,10 +32,13 @@ export async function getAvailableMethods(currency: string): Promise<AvailableMe
     db.bankAccount.count({ where: { isActive: true, currency } }),
   ]);
   const disabled = new Set(settings.filter((s) => !s.enabled).map((s) => s.method));
+  const custom = new Map(settings.filter((s) => s.currencies.length > 0).map((s) => [s.method, s.currencies]));
   const out: AvailableMethod[] = [];
   for (const m of GATEWAY_METHODS) {
     const g = getGateway(m)!;
-    if (g.isConfigured() && g.supportsCurrency(currency) && !disabled.has(m)) out.push({ method: m, label: g.label });
+    // An administrator's currency list for a gateway replaces the built-in defaults.
+    const currencyOk = custom.has(m) ? custom.get(m)!.includes(currency) : g.supportsCurrency(currency);
+    if (g.isConfigured() && currencyOk && !disabled.has(m)) out.push({ method: m, label: g.label });
   }
   if (banks > 0 && !disabled.has("BANK_TRANSFER")) out.push({ method: "BANK_TRANSFER", label: "Bank transfer" });
   return out;
@@ -191,17 +193,8 @@ async function markPaymentSuccess(paymentId: string, ctx: { method: PaymentMetho
     actorId: ctx.confirmedById ?? null, action: "payment.confirmed", entityType: "Payment", entityId: paymentId,
     metadata: { reference: result.reference, method: ctx.method, amountMinor: result.amountMinor, currency: result.currency, note: ctx.note },
   });
-  // Email failures must never undo a confirmed payment.
-  const [user, app] = await Promise.all([
-    db.user.findUnique({ where: { id: result.clientId }, select: { email: true, name: true } }),
-    db.visaApplication.findUnique({ where: { id: result.applicationId }, select: { applicationNumber: true, packageName: true } }),
-  ]);
-  if (user && app) {
-    await sendEmailSafely({
-      to: user.email,
-      ...paymentSuccessEmail({ name: user.name, reference: result.reference, amount: formatMinor(result.amountMinor, result.currency), applicationNumber: app.applicationNumber, packageName: app.packageName, link: `${appUrl()}/client/payments/${result.id}` }),
-    });
-  }
+  // Notifications/emails run after the commit and can never undo a confirmed payment.
+  await onPaymentSucceeded(result.id);
   return "success";
 }
 
@@ -233,11 +226,12 @@ export async function finalizeGatewayPayment(provider: GatewayMethod, gatewayRef
       result.amountMinor === payment.amountMinor && result.currency === payment.currency && (result.reference === null || result.reference === gatewayReference);
     if (!matches) {
       // Paid, but not what we expected: never auto-confirm. Park it for a human.
-      await db.payment.updateMany({
+      const parked = await db.payment.updateMany({
         where: { id: payment.id, status: { in: ["PENDING", "FAILED", "CANCELLED"] } },
         data: { status: "PROCESSING", failureReason: `Gateway reported ${result.amountMinor ?? "?"} ${result.currency ?? "?"} but ${payment.amountMinor} ${payment.currency} was expected. Needs staff review.` },
       });
       await recordAudit({ actorId: null, action: "payment.mismatch", entityType: "Payment", entityId: payment.id, metadata: { reference: payment.reference, provider, expected: { amountMinor: payment.amountMinor, currency: payment.currency }, got: { amountMinor: result.amountMinor, currency: result.currency, reference: result.reference } } });
+      if (parked.count === 1) await onPaymentNeedsReview(payment.id);
       return { outcome: "mismatch", paymentId: payment.id };
     }
     const done = await markPaymentSuccess(payment.id, { method: provider, note: `gateway reference ${gatewayReference}` });
@@ -256,7 +250,8 @@ export async function finalizeGatewayPayment(provider: GatewayMethod, gatewayRef
   }
 
   if (result.status === "failed") {
-    await db.payment.updateMany({ where: { id: payment.id, status: "PENDING" }, data: { status: "FAILED", failureReason: "The payment was not completed." } });
+    const failed = await db.payment.updateMany({ where: { id: payment.id, status: "PENDING" }, data: { status: "FAILED", failureReason: "The payment was not completed." } });
+    if (failed.count === 1) await onPaymentFailed(payment.id, "The payment was not completed.");
     return { outcome: "failed", paymentId: payment.id };
   }
   return { outcome: "pending", paymentId: payment.id };
@@ -306,23 +301,54 @@ export async function verifyPaymentReturn(actor: Actor, paymentReference: string
 // Manual bank transfer
 // ---------------------------------------------------------------------------
 
-export async function submitTransferProof(
-  actor: Actor,
-  paymentId: string,
-  input: { filename: string; bytes: Buffer; senderName: string; transferDate: string },
-) {
+export async function prepareProofSubmission(actor: Actor, paymentId: string) {
   const payment = await getOwnedPayment(actor, paymentId);
   if (payment.method !== "BANK_TRANSFER" || !["PENDING", "FAILED", "PROCESSING"].includes(payment.status)) {
     throw new AppError("Proof of transfer can't be submitted for this payment.", "CONFLICT");
   }
+  return payment;
+}
+
+export function parseProofFields(input: { senderName: string; transferDate: string }) {
   const senderName = input.senderName.trim();
   if (senderName.length < 2 || senderName.length > 120) throw new AppError("Enter the name on the account you paid from.", "VALIDATION", { senderName: ["Required"] });
   const date = /^\d{4}-\d{2}-\d{2}$/.test(input.transferDate) ? new Date(`${input.transferDate}T00:00:00.000Z`) : null;
   if (!date || Number.isNaN(date.getTime()) || date.getTime() > Date.now() + 86_400_000 || date.getUTCFullYear() < 2020) {
     throw new AppError("Enter the date you made the transfer.", "VALIDATION", { transferDate: ["Enter a valid date"] });
   }
+  return { senderName, date };
+}
+
+/** Attach an already-stored, already-validated receipt to a bank-transfer payment. */
+export async function finalizeProof(
+  actor: Actor,
+  payment: Awaited<ReturnType<typeof prepareProofSubmission>>,
+  file: { storageKey: string; filename: string; format: DocFormat; sizeBytes: number },
+  fields: { senderName: string; date: Date },
+) {
+  // Compare-and-set on the status we validated against, so a concurrent confirm/cancel isn't overwritten.
+  const res = await db.payment.updateMany({
+    where: { id: payment.id, method: "BANK_TRANSFER", status: { in: ["PENDING", "FAILED", "PROCESSING"] } },
+    data: {
+      status: "PROCESSING", failureReason: null, proofStorageKey: file.storageKey, proofFilename: safeFilename(file.filename, file.format), proofMimeType: MIME_BY_FORMAT[file.format],
+      proofSizeBytes: file.sizeBytes, senderName: fields.senderName, transferDate: fields.date, proofSubmittedAt: new Date(), reviewedById: null, reviewedAt: null, reviewNote: null,
+    },
+  });
+  if (res.count !== 1) throw new AppError("This payment was just updated. Please refresh and try again.", "CONFLICT");
+  await db.paymentTransaction.create({ data: { paymentId: payment.id, provider: "BANK_TRANSFER", event: "proof_submitted", providerReference: payment.reference, status: "submitted", note: `Proof stored at ${file.storageKey}`, amountMinor: payment.amountMinor, currency: payment.currency } });
+  await recordAudit({ actorId: actor.id, action: "payment.proof_submitted", entityType: "Payment", entityId: payment.id, metadata: { reference: payment.reference } });
+  await onProofSubmitted(payment.id);
+}
+
+export async function submitTransferProof(
+  actor: Actor,
+  paymentId: string,
+  input: { filename: string; bytes: Buffer; senderName: string; transferDate: string },
+) {
+  const payment = await prepareProofSubmission(actor, paymentId);
+  const fields = parseProofFields(input);
   if (input.bytes.length === 0) throw new AppError("That file is empty. Please choose another file.", "VALIDATION");
-  if (input.bytes.length > MAX_SERVER_UPLOAD_BYTES) throw new AppError("That file is too large. The maximum size is 4MB.", "VALIDATION");
+  if (input.bytes.length > MAX_PROOF_BYTES) throw new AppError(`That file is too large. The maximum size is ${MAX_PROOF_BYTES / (1024 * 1024)}MB.`, "VALIDATION");
   const format = sniffFormat(input.bytes);
   if (!format) throw new AppError("Unsupported file type. Upload a PDF, JPG or PNG of your transfer receipt.", "VALIDATION");
 
@@ -330,21 +356,11 @@ export async function submitTransferProof(
   const storage = getPrivateStorage();
   await storage.put(key, input.bytes, MIME_BY_FORMAT[format]);
   try {
-    await db.$transaction([
-      db.payment.update({
-        where: { id: payment.id },
-        data: {
-          status: "PROCESSING", failureReason: null, proofStorageKey: key, proofFilename: safeFilename(input.filename, format), proofMimeType: MIME_BY_FORMAT[format],
-          proofSizeBytes: input.bytes.length, senderName, transferDate: date, proofSubmittedAt: new Date(), reviewedById: null, reviewedAt: null, reviewNote: null,
-        },
-      }),
-      db.paymentTransaction.create({ data: { paymentId: payment.id, provider: "BANK_TRANSFER", event: "proof_submitted", providerReference: payment.reference, status: "submitted", note: `Proof stored at ${key}`, amountMinor: payment.amountMinor, currency: payment.currency } }),
-    ]);
+    await finalizeProof(actor, payment, { storageKey: key, filename: input.filename, format, sizeBytes: input.bytes.length }, fields);
   } catch (e) {
     await storage.delete(key).catch(() => undefined);
     throw e;
   }
-  await recordAudit({ actorId: actor.id, action: "payment.proof_submitted", entityType: "Payment", entityId: payment.id, metadata: { reference: payment.reference } });
 }
 
 /** Authorised read of a transfer proof: the owning client, or staff with payments.view inside their scope. */
@@ -395,6 +411,7 @@ export async function reviewBankTransfer(actor: Actor, paymentId: string, input:
   });
   if (res.count !== 1) throw new AppError("This payment was just updated by someone else.", "CONFLICT");
   await recordAudit({ actorId: actor.id, action: "payment.transfer_rejected", entityType: "Payment", entityId: payment.id, metadata: { reference: payment.reference, reason: note } });
+  await onPaymentFailed(payment.id, note);
 }
 
 export async function requestAdditionalPayment(actor: Actor, applicationId: string, input: { label: string; amountMinor: number }) {
@@ -409,6 +426,7 @@ export async function requestAdditionalPayment(actor: Actor, applicationId: stri
   const pkg = await db.travelPackage.findUniqueOrThrow({ where: { id: app.packageId }, select: { currency: true } });
   const payment = await db.$transaction((tx) => createPaymentRow(tx, { applicationId: app.id, clientId: app.clientId, kind: "ADDITIONAL", description: label, items: [{ label, amountMinor: input.amountMinor }], currency: pkg.currency, createdById: actor.id }));
   await recordAudit({ actorId: actor.id, action: "payment.created", entityType: "Payment", entityId: payment.id, metadata: { reference: payment.reference, amountMinor: payment.amountMinor, kind: "ADDITIONAL" } });
+  await notifyUsers([app.clientId], { type: "payment.requested", title: "A payment is needed", body: `${label} · ${formatMinor(payment.amountMinor, payment.currency)}`, href: `/client/payments/${payment.id}`, applicationId: app.id }).catch(() => undefined);
   return payment;
 }
 
@@ -441,6 +459,93 @@ export async function recordRefund(actor: Actor, paymentId: string, input: { amo
   if (res.count !== 1) throw new AppError("This payment was just updated. Please refresh and try again.", "CONFLICT");
   await db.paymentTransaction.create({ data: { paymentId: payment.id, provider: payment.method ?? "BANK_TRANSFER", event: "refund_recorded", amountMinor: input.amountMinor, currency: payment.currency, note: reason } });
   await recordAudit({ actorId: actor.id, action: "payment.refunded", entityType: "Payment", entityId: payment.id, metadata: { reference: payment.reference, amountMinor: input.amountMinor, totalRefundedMinor: total, reason } });
+}
+
+/**
+ * Refund through the payment gateway where it has a refund API (Paystack, Flutterwave); otherwise this
+ * behaves like recordRefund (the money is returned outside this app and the refund is recorded).
+ *
+ * The refunded amount is RESERVED in the database (compare-and-set) before the gateway is called, and
+ * released again if the gateway refuses, so two concurrent refunds can never exceed the amount paid
+ * and a gateway failure never leaves a phantom refund on record.
+ */
+export async function refundPayment(actor: Actor, paymentId: string, input: { amountMinor: number; reason: string }): Promise<{ via: "gateway" | "recorded"; gatewayStatus?: "pending" | "processed" }> {
+  const payment = await getManagedPayment(actor, paymentId, "payments.refund");
+  const gateway = payment.method && payment.method !== "BANK_TRANSFER" ? getGateway(payment.method) : undefined;
+  if (!gateway?.refund || !gateway.isConfigured()) {
+    await recordRefund(actor, paymentId, input);
+    return { via: "recorded" };
+  }
+  if (!["SUCCESS", "PARTIALLY_REFUNDED"].includes(payment.status)) throw new AppError("Only paid payments can be refunded.", "VALIDATION");
+  const reason = input.reason.trim();
+  if (reason.length < 3) throw new AppError("Record why the refund was made.", "VALIDATION", { reason: ["Required"] });
+  const remaining = payment.amountMinor - payment.refundedAmountMinor;
+  if (!Number.isInteger(input.amountMinor) || input.amountMinor <= 0 || input.amountMinor > remaining) {
+    throw new AppError(`Enter an amount between 0.01 and ${formatMinor(remaining, payment.currency)}.`, "VALIDATION", { amount: ["Invalid amount"] });
+  }
+  const charge = await db.paymentTransaction.findFirst({ where: { paymentId: payment.id, provider: gateway.method, event: "verify", status: "success" }, orderBy: { createdAt: "desc" } });
+  if (!charge?.providerReference) throw new AppError("We can't find the verified charge for this payment, so it can't be refunded through the gateway. Record the refund manually instead.", "VALIDATION");
+  const rawId = (charge.payload as { id?: unknown } | null)?.id;
+
+  const total = payment.refundedAmountMinor + input.amountMinor;
+  const reserved = await db.payment.updateMany({
+    where: { id: payment.id, status: payment.status, refundedAmountMinor: payment.refundedAmountMinor },
+    data: { refundedAmountMinor: total, status: total >= payment.amountMinor ? "REFUNDED" : "PARTIALLY_REFUNDED", refundReason: reason, refundedAt: new Date() },
+  });
+  if (reserved.count !== 1) throw new AppError("This payment was just updated. Please refresh and try again.", "CONFLICT");
+
+  let result;
+  try {
+    result = await gateway.refund({ reference: charge.providerReference, gatewayTransactionId: rawId !== undefined && rawId !== null ? String(rawId) : null, amountMinor: input.amountMinor, currency: payment.currency, reason });
+  } catch (e) {
+    // Release the reservation: nothing was refunded.
+    await db.payment.updateMany({ where: { id: payment.id, refundedAmountMinor: total }, data: { refundedAmountMinor: payment.refundedAmountMinor, status: payment.status, refundReason: payment.refundReason, refundedAt: payment.refundedAt } });
+    await db.paymentTransaction.create({ data: { paymentId: payment.id, provider: gateway.method, event: "refund_failed", status: "failed", amountMinor: input.amountMinor, currency: payment.currency, note: e instanceof Error ? e.message : "Refund failed" } });
+    await recordAudit({ actorId: actor.id, action: "payment.refund_failed", entityType: "Payment", entityId: payment.id, metadata: { reference: payment.reference, amountMinor: input.amountMinor } });
+    console.error(`[payments] ${gateway.method} refund failed:`, e instanceof Error ? e.message : e);
+    throw new AppError(`${gateway.label} did not accept the refund${e instanceof Error && e.message ? ` (${e.message})` : ""}. Nothing was changed.`, "VALIDATION");
+  }
+  await db.paymentTransaction.create({
+    data: { paymentId: payment.id, provider: gateway.method, event: "refund_requested", providerReference: result.gatewayRefundId, status: result.status, amountMinor: input.amountMinor, currency: payment.currency, note: reason, payload: result.raw as Prisma.InputJsonValue },
+  });
+  await recordAudit({ actorId: actor.id, action: "payment.refunded", entityType: "Payment", entityId: payment.id, metadata: { reference: payment.reference, amountMinor: input.amountMinor, totalRefundedMinor: total, reason, via: "gateway", gatewayStatus: result.status } });
+  return { via: "gateway", gatewayStatus: result.status };
+}
+
+/**
+ * A gateway charge that succeeded but didn't match the expected amount/currency is parked as PROCESSING.
+ * A person with payments.manage decides: accept it as paid, or reject it (the money must then be refunded).
+ */
+export async function resolveHeldPayment(actor: Actor, paymentId: string, input: { action: "approve" | "reject"; note: string }) {
+  const payment = await getManagedPayment(actor, paymentId, "payments.manage");
+  if (!payment.method || payment.method === "BANK_TRANSFER" || payment.status !== "PROCESSING") throw new AppError("This payment isn't waiting on a decision.", "CONFLICT");
+  const note = input.note.trim();
+  if (note.length < 3 || note.length > 500) throw new AppError("Record why you made this decision (3-500 characters).", "VALIDATION", { note: ["A reason is required"] });
+  const charge = await db.paymentTransaction.findFirst({ where: { paymentId: payment.id, provider: payment.method, event: "verify", status: "success" } });
+  if (!charge) throw new AppError("There is no successful gateway charge on record for this payment.", "VALIDATION");
+
+  if (input.action === "approve") {
+    const r = await markPaymentSuccess(payment.id, { method: payment.method, confirmedById: actor.id, reviewNote: note, note: "held payment approved by staff" });
+    if (r === "already_paid") throw new AppError("This payment was just confirmed by someone else.", "CONFLICT");
+    await recordAudit({ actorId: actor.id, action: "payment.held_approved", entityType: "Payment", entityId: payment.id, metadata: { reference: payment.reference, note, chargedAmountMinor: charge.amountMinor, chargedCurrency: charge.currency } });
+    return;
+  }
+  const res = await db.payment.updateMany({ where: { id: payment.id, status: "PROCESSING" }, data: { status: "FAILED", failureReason: note, reviewedById: actor.id, reviewedAt: new Date(), reviewNote: note } });
+  if (res.count !== 1) throw new AppError("This payment was just updated by someone else.", "CONFLICT");
+  await recordAudit({ actorId: actor.id, action: "payment.held_rejected", entityType: "Payment", entityId: payment.id, metadata: { reference: payment.reference, note, chargedAmountMinor: charge.amountMinor, chargedCurrency: charge.currency, refundNeeded: true } });
+  await onPaymentFailed(payment.id, "We couldn't match your payment to this order. We will contact you about a refund.");
+}
+
+/** Staff-triggered "ask the gateway again" for an online payment still pending or held. */
+export async function recheckPayment(actor: Actor, paymentId: string) {
+  const payment = await getManagedPayment(actor, paymentId, "payments.manage");
+  if (!payment.method || payment.method === "BANK_TRANSFER") throw new AppError("Only online payments can be re-checked.", "VALIDATION");
+  if (PAID.includes(payment.status)) throw new AppError("This payment is already settled.", "CONFLICT");
+  const last = await db.paymentTransaction.findFirst({ where: { paymentId: payment.id, event: "initialize" }, orderBy: { createdAt: "desc" } });
+  if (!last?.providerReference) throw new AppError("This payment was never started with the gateway.", "VALIDATION");
+  const r = await finalizeGatewayPayment(payment.method as GatewayMethod, last.providerReference);
+  await recordAudit({ actorId: actor.id, action: "payment.rechecked", entityType: "Payment", entityId: payment.id, metadata: { reference: payment.reference, outcome: r.outcome } });
+  return r.outcome;
 }
 
 // ---------------------------------------------------------------------------
