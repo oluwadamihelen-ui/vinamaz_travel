@@ -106,11 +106,12 @@ test("a client cannot open another client's application or document", async ({ b
   expect(r2?.status()).toBe(404);
   const r3 = await b.page.request.get(docHref!);
   expect(r3.status()).toBe(404);
-  const r4 = await b.page.request.post(`/api/applications/${appId}/documents`, { multipart: { requirementKey: "international_passport", file: { name: "x.pdf", mimeType: "application/pdf", buffer: PDF } } });
+  const r4 = await b.page.request.post("/api/uploads", { data: { kind: "DOCUMENT", applicationId: appId, requirementKey: "international_passport", filename: "x.pdf", size: PDF.length } });
   expect(r4.status()).toBe(404);
 
   // Anonymous access is refused.
   const anon = await browser.newContext({ baseURL });
   expect((await anon.request.get(docHref!)).status()).toBe(401);
+  expect((await anon.request.post("/api/uploads", { data: { kind: "DOCUMENT", applicationId: appId, requirementKey: "international_passport", filename: "x.pdf", size: 5 } })).status()).toBe(401);
   await Promise.all([a.context.close(), b.context.close(), anon.close()]);
 });

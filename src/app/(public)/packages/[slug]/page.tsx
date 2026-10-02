@@ -9,6 +9,8 @@ import { getPublicPackageBySlug } from "@/lib/services/packages";
 import { formatMoney } from "@/lib/utils";
 
 export const revalidate = 60;
+/** Pages are rendered on first request, then cached and refreshed every minute (and on package edits). */
+export const generateStaticParams = async () => [];
 
 type Props = { params: Promise<{ slug: string }> };
 

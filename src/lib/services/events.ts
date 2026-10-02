@@ -161,7 +161,7 @@ export function onMessageSent(messageId: string) {
     const app = m.application;
     if (m.senderRole === "CLIENT") {
       const ids = await staffAudience(app.id, "messages.view");
-      await notifyUsers(ids, { type: "message.received", title: `New message · ${app.applicationNumber}`, body: app.client.name, href: `/admin/applications/${app.id}#messages`, applicationId: app.id });
+      await notifyUsers(ids, { type: "message.received", title: `New message · ${app.applicationNumber}`, body: app.client.name, href: `/admin/applications/${app.id}?tab=messages`, applicationId: app.id });
       return;
     }
     await notifyUsers([app.clientId], { type: "message.received", title: `New message about ${app.applicationNumber}`, body: "Open your application to read it.", href: `/client/applications/${app.id}#messages`, applicationId: app.id });

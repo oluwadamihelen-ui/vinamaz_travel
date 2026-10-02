@@ -50,10 +50,23 @@ On **PowerShell**: `$env:DATABASE_URL="<neon url>"` (same for the other two), th
 This creates the China/Canada/Switzerland **draft** packages and one super admin. Sign in at `/login`,
 open `/admin/packages`, fill in real package details and upload artwork, then activate each package.
 
-## Known deployment limits
-- Document uploads are proxied through a serverless function, so each file is capped at ~4MB
-  (Vercel's request-body limit); phone photos are compressed client-side. Move to Blob client uploads if larger PDFs are needed.
-- The rate limiter is in-memory per instance; add Upstash/Vercel KV before launch.
+## File uploads
+Files (application documents up to 25MB or the limit set on the requirement, payment receipts and message attachments up to
+10MB) go **straight from the browser to your private Vercel Blob store**, not through a serverless function, so the old
+~4MB limit is gone. For every upload the server first issues a one-time slot (it picks the storage key, size cap and
+expiry), the browser uploads using a Blob client token bound to exactly that key, size cap and PDF/JPG/PNG, and the server
+then re-reads the stored file, checks its size and magic bytes, and only then attaches it. Abandoned or invalid files are
+deleted. Files stay private and are only ever served through authorised routes.
+Large phone photos (over ~3MB) are still resized in the browser before upload.
+
+> The browser-to-Blob hop uses `@vercel/blob/client` against a *private* store. It is covered by tests on the server side
+> (slot authorisation, validation, completion) and by local end-to-end tests using the local-storage mode, but it can only be
+> exercised for real on Vercel with a private Blob store attached. Upload one document, one receipt and one message
+> attachment after your first deploy.
+
+## Rate limiting
+Login, password reset, uploads, payments and messages are rate limited with counters stored in Postgres, so limits hold
+across all serverless instances (no extra service needed). Old counters are purged automatically.
 
 ## Email (password reset)
 Password reset sends an email through Resend. Without `RESEND_API_KEY` in production no email is sent
@@ -82,8 +95,27 @@ Four methods are supported: **Paystack, Flutterwave, Korapay** (hosted checkout)
 How payments are protected: the server computes every amount; a payment only becomes "Paid" after the gateway's verify API
 confirms the amount, currency and reference (webhook signatures are checked first); webhooks and the return page share one
 idempotent confirmation path; a mismatch is parked for staff review. Refunds are *recorded* in the app (payments.refund
-permission, super admin by default) - send the money from the gateway dashboard or your bank.
+permission, super admin by default).
+- **Paystack and Flutterwave refunds are sent through the gateway** from *Admin -> Payments -> Refund* (the refunded amount is
+  reserved first and released if the gateway refuses, so it can never over-refund). **Korapay and bank-transfer refunds are
+  recorded only**: send the money from the Korapay dashboard or your bank, then record it.
+- If a gateway charge doesn't match the expected amount/currency, the payment is held and staff with `payments.manage` can
+  **accept it or reject it** (with a reason, audited) on the payment page, or press **Re-check with gateway**.
+- *Admin -> Settings* lets a super admin set which currencies each gateway is offered for (blank = the defaults above).
 
 > The gateway request/response shapes and webhook signature schemes were implemented from each provider's public API
 > documentation and unit-tested against simulated responses. They have not been exercised against the live providers from
 > this codebase, so run each gateway's sandbox end-to-end once before taking real money.
+
+## Messaging, notifications and email
+Clients and staff message each other on each application (with attachments); both sides get in-app notifications (the bell
+in the header) and emails. Emails sent: welcome, application received, payment received, payment unsuccessful, document
+replacement requested, more information needed, status updates, application completed and new message (at most one email per
+burst of unread staff replies; emails never contain message text or documents). Emails are best-effort: a failed send is
+logged and never rolls back the action that caused it. Staff are notified in-app only if they hold `notifications.view`.
+
+## Staff accounts
+`staff.manage` lets someone create and edit **staff** accounts. Admins have it by default and can only manage STAFF
+accounts and only grant permissions they hold themselves; super admins manage admins and staff. If an invitation email
+can't be sent, the one-time invite link is shown to the person who created the account so they can pass it on.
+The audit log (`/admin/audit`) is for `audit.view` (super admin by default).
