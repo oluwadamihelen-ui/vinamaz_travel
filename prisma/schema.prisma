@@ -48,6 +48,7 @@ model User {
 
   clientProfile ClientProfile?
   auditLogs     AuditLog[]
+  applications  VisaApplication[]
 
   @@index([role, isActive])
   @@index([createdAt])
@@ -121,6 +122,7 @@ model TravelPackage {
   requirements         PackageRequirement[]
   documentRequirements PackageDocumentRequirement[]
   questions            PackageQuestion[]
+  applications         VisaApplication[]
 
   @@index([status, displayOrder])
   @@index([status, isFeatured])
@@ -250,4 +252,138 @@ model AuditLog {
   @@index([entityType, entityId])
   @@index([actorId, createdAt])
   @@index([action, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Applications (Phase 2)
+// ---------------------------------------------------------------------------
+
+enum ApplicationStatus {
+  DRAFT
+  APPLICATION_SUBMITTED
+  PAYMENT_PENDING
+  PAYMENT_CONFIRMED
+  UNDER_REVIEW
+  DOCUMENTS_REQUIRED
+  DOCUMENTS_UNDER_REVIEW
+  PROCESSING
+  ADDITIONAL_INFORMATION_REQUIRED
+  SUBMITTED_TO_AUTHORITY
+  DECISION_PENDING
+  APPROVED
+  REFUSED
+  COMPLETED
+  CANCELLED
+}
+
+/// A client's application for one package. `applicationNumber` is the public, human-friendly
+/// identifier (VNZ-2026-000001); `id` stays internal. Every query for client-owned data must
+/// be scoped by `clientId` (see src/lib/services/applications.ts).
+///
+/// Extra DB constraints (raw SQL in the migration, not expressible in Prisma):
+///  - at most one DRAFT per (clientId, packageId)
+model VisaApplication {
+  id                String            @id @default(cuid())
+  applicationNumber String            @unique
+  clientId          String
+  packageId         String
+  /// Snapshots so the record stays meaningful if the package is later renamed.
+  packageName       String
+  packageCountry    String
+  status            ApplicationStatus @default(DRAFT)
+  /// Core applicant details for this application (name, DOB, nationality, ...). Validated with Zod.
+  applicant         Json              @default("{}")
+  /// Wizard step the client should resume at.
+  currentStep       String?
+  /// Form-completion progress (0-100), recomputed whenever answers/documents change.
+  /// NOT the processing status (that is `status`).
+  progressPercent   Int               @default(0)
+  lastSavedAt       DateTime          @default(now())
+  submittedAt       DateTime?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  client  User          @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  package TravelPackage @relation(fields: [packageId], references: [id], onDelete: Restrict)
+
+  answers       ApplicationAnswer[]
+  documents     ApplicationDocument[]
+  statusHistory ApplicationStatusHistory[]
+
+  @@index([clientId, status])
+  @@index([clientId, updatedAt])
+  @@index([packageId, status])
+  @@index([status, updatedAt])
+  @@index([createdAt])
+}
+
+/// Answers are keyed by the package question's stable `key` (not an FK) so that editing a
+/// package's questions can never delete or orphan a client's submitted data.
+model ApplicationAnswer {
+  id            String   @id @default(cuid())
+  applicationId String
+  questionKey   String
+  /// Label at the time of answering, for admin display if the question is later reworded.
+  label         String
+  value         Json
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  application VisaApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@unique([applicationId, questionKey])
+}
+
+model ApplicationStatusHistory {
+  id            String             @id @default(cuid())
+  applicationId String
+  fromStatus    ApplicationStatus?
+  toStatus      ApplicationStatus
+  changedById   String?
+  note          String?
+  createdAt     DateTime           @default(now())
+
+  application VisaApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId, createdAt])
+}
+
+enum DocumentStatus {
+  UPLOADED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  REPLACEMENT_REQUIRED
+}
+
+/// An uploaded applicant document. The file itself lives in PRIVATE object storage under
+/// `storageKey`; there is no public URL. Replacements create a new row (`replacesId` -> old
+/// row) and flip the old row's `isCurrent` to false, so history is preserved.
+///
+/// Extra DB constraint (raw SQL): at most one current row per (applicationId, requirementKey).
+model ApplicationDocument {
+  id               String         @id @default(cuid())
+  applicationId    String
+  /// Key of the package document requirement (or FILE question) this satisfies.
+  requirementKey   String
+  name             String
+  storageKey       String         @unique
+  originalFilename String
+  mimeType         String
+  sizeBytes        Int
+  status           DocumentStatus @default(UPLOADED)
+  rejectionReason  String?
+  isCurrent        Boolean        @default(true)
+  replacesId       String?
+  uploadedById     String?
+  reviewedById     String?
+  reviewedAt       DateTime?
+  createdAt        DateTime       @default(now())
+
+  application VisaApplication       @relation(fields: [applicationId], references: [id], onDelete: Restrict)
+  replaces    ApplicationDocument?  @relation("DocumentReplacement", fields: [replacesId], references: [id], onDelete: SetNull)
+  replacedBy  ApplicationDocument[] @relation("DocumentReplacement")
+
+  @@index([applicationId, requirementKey, isCurrent])
+  @@index([status, createdAt])
 }

@@ -14,3 +14,4 @@ test-results
 # Package marketing images uploaded in local development only (production uses Vercel Blob)
 public/package-images/*
 !public/package-images/.gitkeep
+.data
