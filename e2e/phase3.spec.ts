@@ -63,6 +63,7 @@ test("document review workflow across client, admin and restricted staff", async
   test.setTimeout(120_000);
   const clientEmail = `p3c${uid()}@example.com`;
   const staffEmail = `p3s${uid()}@example.com`;
+  const staffName = `Stella ${uid()}`;
 
   // 1. client submits an application
   const client = await ctx(browser, baseURL);
@@ -72,11 +73,11 @@ test("document review workflow across client, admin and restricted staff", async
   const admin = await ctx(browser, baseURL);
   await signIn(admin.page, ADMIN.email, ADMIN.password);
   await admin.page.goto("/admin/staff");
-  await admin.page.getByLabel("Full name").fill("Stella Staff");
+  await admin.page.getByLabel("Full name").fill(staffName);
   await admin.page.getByLabel("Email", { exact: true }).fill(staffEmail);
+  for (const perm of ["Review documents", "Change application status", "Add notes / manage applications"]) await admin.page.getByLabel(perm).first().check();
   await admin.page.getByRole("button", { name: "Create account & send invite" }).click();
   await expect(admin.page.getByText("Account created and invitation emailed.")).toBeVisible();
-  // grant the review permissions (view applications/documents were pre-ticked)
   await expect.poll(() => latestEmailTo(staffEmail)).not.toBeNull();
   const invite = latestEmailTo(staffEmail)!.text.match(/https?:\/\/\S+reset-password\?token=\S+/)![0];
 
@@ -102,7 +103,7 @@ test("document review workflow across client, admin and restricted staff", async
   await admin.page.getByRole("button", { name: "Apply filters" }).click();
   await admin.page.getByRole("link", { name: /VNZ-\d{4}-\d{6}/ }).first().click();
   await expect(admin.page).toHaveURL(new RegExp(appId));
-  await admin.page.getByLabel("Assigned to").selectOption({ label: "Stella Staff (staff)" });
+  await admin.page.getByLabel("Assigned to").selectOption({ label: `${staffName} (staff)` });
   await admin.page.getByRole("button", { name: "Save assignment" }).click();
   await expect(admin.page.getByText("Assigned.")).toBeVisible();
   await admin.page.getByLabel("Change status to").selectOption({ label: "Under review" });
