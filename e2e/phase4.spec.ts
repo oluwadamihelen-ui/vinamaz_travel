@@ -83,7 +83,7 @@ test("online payment: server-computed amount, hosted checkout, verified confirma
   await signInAdmin(admin.page);
   await admin.page.goto(`/admin/payments/${paymentId}`);
   await expect(admin.page.getByText("Paid").first()).toBeVisible();
-  await expect(admin.page.getByText("charge success").first()).toBeVisible(); // the signed webhook was received and recorded
+  await expect(admin.page.getByText("webhook success").first()).toBeVisible(); // the signed webhook was received and recorded
   await admin.page.getByRole("link", { name: /VNZ-\d{4}-\d{6}/ }).first().click();
   await expect(admin.page.getByText("Payment confirmed").first()).toBeVisible();
   await Promise.all([client.context.close(), admin.context.close()]);
@@ -157,7 +157,8 @@ test("bank transfer: admin adds an account, client uploads proof, staff confirm,
   await expect(admin.page.getByRole("link", { name: "receipt.pdf" })).toBeVisible();
   expect((await admin.page.request.get(`/api/payments/${paymentId}/proof`)).status()).toBe(200);
   await admin.page.getByRole("button", { name: "Confirm payment received" }).click();
-  await expect(admin.page.getByText("Payment confirmed.")).toBeVisible();
+  await expect(admin.page.getByRole("button", { name: "Confirm payment received" })).toHaveCount(0); // payment is now settled
+  await expect(admin.page.getByText("Paid").first()).toBeVisible();
 
   await page.reload();
   await expect(page.getByText("Payment received")).toBeVisible();
