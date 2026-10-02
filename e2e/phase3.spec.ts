@@ -91,7 +91,8 @@ test("document review workflow across client, admin and restricted staff", async
 
   // 3. staff see NOTHING until an application is assigned to them
   await signIn(staff.page, staffEmail, "staff-password-123");
-  await expect(staff.page).toHaveURL(/\/admin\/applications/);
+  await expect(staff.page).toHaveURL(/\/admin\/dashboard/);
+  await staff.page.goto("/admin/applications");
   await expect(staff.page.getByText("No applications are assigned to you yet.")).toBeVisible();
   expect((await staff.page.goto(`/admin/applications/${appId}`))?.status()).toBe(404);
   await staff.page.goto("/admin/staff");

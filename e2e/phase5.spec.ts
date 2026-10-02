@@ -73,7 +73,8 @@ test("messaging with attachments, notifications, dashboard and audit log", async
   await submittedApplication(other.page, `Other ${uid()}`, `p5o${uid()}@example.com`);
   expect((await other.context.request.get(attachmentHref!)).status()).toBe(404);
   expect((await other.page.goto(`/client/applications/${appId}`))?.status()).toBe(404);
-  expect((await new (await browser.newContext({ baseURL })).request.get(attachmentHref!)).status()).toBe(401);
+  const anon = await browser.newContext({ baseURL });
+  expect((await anon.request.get(attachmentHref!)).status()).toBe(401);
 
   // staff: lands on the dashboard, sees the unread message everywhere
   const admin = await ctx(browser, baseURL);
