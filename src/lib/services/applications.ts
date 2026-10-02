@@ -11,6 +11,8 @@ import {
 import { CLIENT_EDITABLE_STATUSES, canTransition } from "@/lib/applications/status";
 import { isTerminal, nextAction } from "@/lib/applications/next-action";
 import { applicantDraftSchema, applicantSchema } from "@/lib/validation/application";
+import { computePackageCharge } from "@/lib/payments/amounts";
+import { createPaymentRow } from "@/lib/payments/create";
 import { recordAudit } from "./audit";
 import { nextApplicationNumber } from "./application-number";
 
@@ -271,7 +273,7 @@ export async function saveApplicationStep(
 // Submission
 // ---------------------------------------------------------------------------
 
-export async function submitApplication(actor: Actor, applicationId: string): Promise<{ applicationNumber: string }> {
+export async function submitApplication(actor: Actor, applicationId: string): Promise<{ applicationNumber: string; paymentId: string | null }> {
   const app = await getOwnedApplication(actor, applicationId);
   if (app.status !== "DRAFT") throw new AppError("This application has already been submitted.", "CONFLICT");
   const config = await loadPackageConfig(app.packageId);
@@ -302,6 +304,7 @@ export async function submitApplication(actor: Actor, applicationId: string): Pr
   const to: ApplicationStatus = "APPLICATION_SUBMITTED";
   if (!canTransition(app.status, to)) throw new AppError("This application cannot be submitted.", "CONFLICT");
 
+  let paymentId: string | null = null;
   await db.$transaction(async (tx) => {
     // Compare-and-set on status: two concurrent submits cannot both succeed.
     const res = await tx.visaApplication.updateMany({
@@ -310,9 +313,19 @@ export async function submitApplication(actor: Actor, applicationId: string): Pr
     });
     if (res.count !== 1) throw new AppError("This application has already been submitted.", "CONFLICT");
     await tx.applicationStatusHistory.create({ data: { applicationId: app.id, fromStatus: "DRAFT", toStatus: to, changedById: actor.id, note: "Application submitted by client" } });
+
+    // If the package has fees configured, create the payment (amount computed here, on the server) and wait for it.
+    const pkg = await tx.travelPackage.findUnique({ where: { id: app.packageId }, select: { price: true, applicationFee: true, serviceFee: true, currency: true } });
+    const charge = pkg ? computePackageCharge(pkg) : null;
+    if (charge && charge.totalMinor > 0) {
+      const payment = await createPaymentRow(tx, { applicationId: app.id, clientId: actor.id, kind: "APPLICATION", description: `${app.packageName} application fees`, items: charge.items, currency: charge.currency });
+      paymentId = payment.id;
+      await tx.visaApplication.update({ where: { id: app.id }, data: { status: "PAYMENT_PENDING" } });
+      await tx.applicationStatusHistory.create({ data: { applicationId: app.id, fromStatus: to, toStatus: "PAYMENT_PENDING", changedById: null, note: "Payment is required to continue." } });
+    }
   });
   await recordAudit({ actorId: actor.id, action: "application.submitted", entityType: "VisaApplication", entityId: app.id, metadata: { applicationNumber: app.applicationNumber } });
-  return { applicationNumber: app.applicationNumber };
+  return { applicationNumber: app.applicationNumber, paymentId };
 }
 
 export type WizardView = Awaited<ReturnType<typeof getApplicationView>>;

@@ -35,3 +35,17 @@ export function staffInviteEmail(opts: { name: string; link: string; hours: numb
   const text = `Hi ${first},\n\nAn account has been created for you on the Vinamaz staff portal. Set your password here (works once, expires in ${opts.hours} hours):\n\n${opts.link}\n\nVinamaz Travels`;
   return { subject: "You've been invited to Vinamaz Travels", html, text };
 }
+
+export function paymentSuccessEmail(opts: { name: string; reference: string; amount: string; applicationNumber: string; packageName: string; link: string }) {
+  const first = opts.name.split(" ")[0] ?? "there";
+  const html = layout(
+    "Payment received",
+    `<p style="font-size:15px;line-height:1.6">Hi ${esc(first)}, we've received your payment. Thank you.</p>
+<table style="font-size:14px;line-height:1.8;margin:12px 0"><tr><td style="color:#665557;padding-right:16px">Amount</td><td><strong>${esc(opts.amount)}</strong></td></tr>
+<tr><td style="color:#665557;padding-right:16px">Reference</td><td>${esc(opts.reference)}</td></tr>
+<tr><td style="color:#665557;padding-right:16px">Application</td><td>${esc(opts.applicationNumber)} · ${esc(opts.packageName)}</td></tr></table>
+<p style="margin:24px 0"><a href="${esc(opts.link)}" style="background:#b01012;color:#fff;padding:14px 26px;border-radius:999px;text-decoration:none;font-weight:600;display:inline-block">View receipt</a></p>`,
+  );
+  const text = `Hi ${first},\n\nWe've received your payment of ${opts.amount} (reference ${opts.reference}) for application ${opts.applicationNumber} (${opts.packageName}).\n\nView your receipt: ${opts.link}\n\nVinamaz Travels`;
+  return { subject: `Payment received · ${opts.reference}`, html, text };
+}

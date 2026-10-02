@@ -1,4 +1,5 @@
 import "server-only";
+import { randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -32,10 +33,11 @@ export interface PrivateStorage {
 
 const DOCUMENT_KEY_RE = /^applications\/[a-z0-9]+\/[a-f0-9-]{36}\.(pdf|jpg|png)$/;
 /** Public marketing images (package artwork) share the store but live under their own prefix. */
+const PAYMENT_PROOF_KEY_RE = /^payments\/[a-z0-9]+\/[a-f0-9-]{36}\.(pdf|jpg|png)$/;
 export const PACKAGE_IMAGE_KEY_RE = /^package-images\/[a-f0-9-]{36}\.(jpg|png|webp)$/;
 
 function assertKey(key: string) {
-  if (!DOCUMENT_KEY_RE.test(key) && !PACKAGE_IMAGE_KEY_RE.test(key)) throw new Error("Invalid storage key");
+  if (!DOCUMENT_KEY_RE.test(key) && !PAYMENT_PROOF_KEY_RE.test(key) && !PACKAGE_IMAGE_KEY_RE.test(key)) throw new Error("Invalid storage key");
 }
 
 class VercelPrivateStorage implements PrivateStorage {
@@ -87,6 +89,11 @@ class LocalPrivateStorage implements PrivateStorage {
   async read(key: string) {
     return readFile(this.file(key));
   }
+}
+
+/** Server-generated key for a bank-transfer proof. */
+export function newPaymentProofKey(paymentId: string, format: "pdf" | "jpg" | "png"): string {
+  return `payments/${paymentId}/${randomUUID()}.${format}`;
 }
 
 let instance: PrivateStorage | undefined;

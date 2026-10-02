@@ -3,6 +3,10 @@ import type { Actor } from "@/lib/auth/actor";
 import type { Role } from "@/generated/prisma/enums";
 
 export async function resetDb() {
+  await db.paymentTransaction.deleteMany();
+  await db.payment.deleteMany();
+  await db.bankAccount.deleteMany();
+  await db.paymentMethodSetting.deleteMany();
   await db.applicationDocument.deleteMany();
   await db.applicationStatusHistory.deleteMany();
   await db.applicationAnswer.deleteMany();
@@ -65,3 +69,11 @@ export async function submittedApplication(client: Actor, packageSlug: string): 
 }
 
 export const STAFF_PERMS = ["applications.view", "applications.manage", "applications.status_update", "applications.assign", "documents.view", "documents.review"];
+
+/** An ACTIVE package that charges NGN 150,000 + 5,000 service fee (= 15,500,000 kobo). */
+export async function makePricedPackage(admin: Actor, name = "Priced Visa Package") {
+  const pkg = await makeActivePackage(admin, name);
+  await db.travelPackage.update({ where: { id: pkg.id }, data: { price: "150000", serviceFee: "5000", currency: "NGN" } });
+  return pkg;
+}
+export const PRICED_TOTAL_MINOR = 15_500_000;

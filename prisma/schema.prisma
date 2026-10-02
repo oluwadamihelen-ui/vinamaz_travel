@@ -54,6 +54,7 @@ model User {
   /// Applications assigned to this staff member (STAFF users only see these).
   assignedApplications VisaApplication[]    @relation("ApplicationAssignee")
   applicationNotes     ApplicationNote[]
+  payments             Payment[]            @relation("PaymentClient")
   passwordResetTokens  PasswordResetToken[]
 
   @@index([role, isActive])
@@ -322,6 +323,7 @@ model VisaApplication {
   documents     ApplicationDocument[]
   statusHistory ApplicationStatusHistory[]
   notes         ApplicationNote[]
+  payments      Payment[]
 
   @@index([clientId, status])
   @@index([clientId, updatedAt])
@@ -433,4 +435,135 @@ model PasswordResetToken {
 
   @@index([userId, usedAt])
   @@index([expiresAt])
+}
+
+// ---------------------------------------------------------------------------
+// Payments (Phase 4)
+// ---------------------------------------------------------------------------
+
+enum PaymentStatus {
+  /// Created / awaiting the client (or a gateway result).
+  PENDING
+  /// Manual transfer proof submitted, or a paid amount that needs staff review.
+  PROCESSING
+  SUCCESS
+  FAILED
+  CANCELLED
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+enum PaymentMethod {
+  PAYSTACK
+  FLUTTERWAVE
+  KORAPAY
+  BANK_TRANSFER
+}
+
+enum PaymentKind {
+  /// The package fees for the application (exactly one per application).
+  APPLICATION
+  /// An extra charge requested by staff.
+  ADDITIONAL
+}
+
+/// One chargeable amount for an application. Amounts are integers in minor units (kobo, cents).
+/// The amount and currency are always computed on the server and snapshotted here; nothing the
+/// browser sends can change them. A payment only becomes SUCCESS through server-side gateway
+/// verification or a staff member confirming a manual transfer.
+///
+/// Extra DB constraint (raw SQL in the migration): one APPLICATION payment per application, so an
+/// application can never be charged its package fees twice. Retries re-use the same row.
+model Payment {
+  id            String         @id @default(cuid())
+  /// Public, human-friendly reference (VNZ-PAY-XXXXXXXXXX). Used as the bank-transfer narration.
+  reference     String         @unique
+  applicationId String
+  clientId      String
+  kind          PaymentKind    @default(APPLICATION)
+  description   String
+  /// [{ "label": string, "amountMinor": number }]
+  lineItems     Json
+  amountMinor   Int
+  currency      String         @db.VarChar(3)
+  method        PaymentMethod?
+  status        PaymentStatus  @default(PENDING)
+  paidAt        DateTime?
+  failureReason String?
+
+  refundedAmountMinor Int       @default(0)
+  refundReason        String?
+  refundedAt          DateTime?
+
+  // Manual bank transfer
+  proofStorageKey  String?
+  proofFilename    String?
+  proofMimeType    String?
+  proofSizeBytes   Int?
+  senderName       String?
+  transferDate     DateTime? @db.Date
+  proofSubmittedAt DateTime?
+  reviewedById     String?
+  reviewedAt       DateTime?
+  reviewNote       String?
+
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  application  VisaApplication      @relation(fields: [applicationId], references: [id], onDelete: Restrict)
+  client       User                 @relation("PaymentClient", fields: [clientId], references: [id], onDelete: Restrict)
+  transactions PaymentTransaction[]
+
+  @@index([applicationId, status])
+  @@index([clientId, createdAt])
+  @@index([status, method, createdAt])
+  @@index([createdAt])
+}
+
+/// Append-only log of every gateway interaction (initialize, verify, webhook). `dedupeKey` makes
+/// webhook processing idempotent: the same event can only be recorded once per provider.
+model PaymentTransaction {
+  id                String        @id @default(cuid())
+  paymentId         String
+  provider          PaymentMethod
+  event             String
+  dedupeKey         String?
+  /// The reference we sent to / received from the gateway for this attempt.
+  providerReference String?
+  status            String?
+  amountMinor       Int?
+  currency          String?
+  note              String?
+  payload           Json?
+  createdAt         DateTime      @default(now())
+
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+
+  @@unique([provider, dedupeKey])
+  @@index([paymentId, createdAt])
+  @@index([providerReference])
+}
+
+/// Vinamaz bank accounts shown to clients who pay by manual transfer. Entered by an administrator.
+model BankAccount {
+  id            String   @id @default(cuid())
+  bankName      String
+  accountName   String
+  accountNumber String
+  currency      String   @default("NGN") @db.VarChar(3)
+  instructions  String?
+  isActive      Boolean  @default(true)
+  sortOrder     Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([isActive, sortOrder])
+}
+
+/// Lets an administrator switch a payment method off without touching environment variables.
+model PaymentMethodSetting {
+  method    PaymentMethod @id
+  enabled   Boolean       @default(true)
+  updatedAt DateTime      @updatedAt
 }

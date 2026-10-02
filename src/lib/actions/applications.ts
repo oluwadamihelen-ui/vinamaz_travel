@@ -57,9 +57,10 @@ export async function saveStepAction(applicationId: string, stepKey: string, _pr
 
 export async function submitApplicationAction(applicationId: string, _prev: WizardState, formData: FormData): Promise<WizardState> {
   if (formData.get("confirm") !== "on") return { error: "Please confirm that the information you've provided is accurate." };
+  let paymentId: string | null = null;
   try {
     const actor = requireClient(await getActor());
-    await submitApplication(actor, applicationId);
+    ({ paymentId } = await submitApplication(actor, applicationId));
   } catch (e) {
     if (e instanceof AppError) {
       const fieldErrors = e.fieldErrors ? Object.fromEntries(Object.entries(e.fieldErrors).map(([k, v]) => [k, v[0] ?? ""])) : undefined;
@@ -68,5 +69,6 @@ export async function submitApplicationAction(applicationId: string, _prev: Wiza
     console.error("[submit]", e);
     return { error: "Your application could not be submitted. Please try again." };
   }
-  redirect(`/client/applications/${applicationId}?submitted=1`);
+  // Fees configured: go straight to payment. Otherwise show the confirmation.
+  redirect(paymentId ? `/client/payments/${paymentId}?submitted=1` : `/client/applications/${applicationId}?submitted=1`);
 }
