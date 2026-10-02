@@ -8,6 +8,7 @@ import { Alert } from "@/components/ui/misc";
 export default async function AdminHome({ searchParams }: { searchParams: Promise<{ denied?: string }> }) {
   const actor = await requireStaffPage();
   const { denied } = await searchParams;
+  if (!denied && can(actor, "applications.view")) redirect("/admin/applications");
   if (!denied && can(actor, "packages.view")) redirect("/admin/packages");
   return (
     <div className="max-w-xl space-y-4">

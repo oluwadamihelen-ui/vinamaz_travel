@@ -27,18 +27,26 @@ export async function requestPasswordReset(rawEmail: string): Promise<void> {
   const user = await db.user.findUnique({ where: { email: email.data }, select: { id: true, name: true, email: true, isActive: true } });
   if (!user || !user.isActive) return;
 
+  const token = await issueResetToken(user.id, RESET_TOKEN_MINUTES);
+  await recordAudit({ actorId: null, action: "user.password_reset_requested", entityType: "User", entityId: user.id });
+
+  const link = resetLink(token);
+  await sendEmailSafely({ to: user.email, ...passwordResetEmail({ name: user.name, link, minutes: RESET_TOKEN_MINUTES }) });
+}
+
+/** Create a fresh single-use token (invalidating older ones) and return the RAW token for the emailed link. */
+export async function issueResetToken(userId: string, minutes: number): Promise<string> {
   const token = randomBytes(32).toString("base64url");
   await db.$transaction(async (tx) => {
     // Only the newest link works.
-    await tx.passwordResetToken.deleteMany({ where: { userId: user.id, usedAt: null } });
-    await tx.passwordResetToken.create({
-      data: { userId: user.id, tokenHash: sha256(token), expiresAt: new Date(Date.now() + RESET_TOKEN_MINUTES * 60_000) },
-    });
+    await tx.passwordResetToken.deleteMany({ where: { userId, usedAt: null } });
+    await tx.passwordResetToken.create({ data: { userId, tokenHash: sha256(token), expiresAt: new Date(Date.now() + minutes * 60_000) } });
   });
-  await recordAudit({ actorId: null, action: "user.password_reset_requested", entityType: "User", entityId: user.id });
+  return token;
+}
 
-  const link = `${appUrl()}/reset-password?token=${encodeURIComponent(token)}`;
-  await sendEmailSafely({ to: user.email, ...passwordResetEmail({ name: user.name, link, minutes: RESET_TOKEN_MINUTES }) });
+export function resetLink(token: string): string {
+  return `${appUrl()}/reset-password?token=${encodeURIComponent(token)}`;
 }
 
 /** True if the token exists, is unused and unexpired. */

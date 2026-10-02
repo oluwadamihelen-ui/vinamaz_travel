@@ -9,6 +9,7 @@ import {
   type Answers, type Condition, type DocReqDef, type QuestionDef, type StepDef,
 } from "@/lib/applications/engine";
 import { CLIENT_EDITABLE_STATUSES, canTransition } from "@/lib/applications/status";
+import { isTerminal, nextAction } from "@/lib/applications/next-action";
 import { applicantDraftSchema, applicantSchema } from "@/lib/validation/application";
 import { recordAudit } from "./audit";
 import { nextApplicationNumber } from "./application-number";
@@ -118,10 +119,15 @@ export async function startApplication(actor: Actor, packageSlug: string): Promi
 
 export async function getApplicationView(actor: Actor, applicationId: string) {
   const app = await getOwnedApplication(actor, applicationId);
-  const [config, answerRows, documents] = await Promise.all([
+  const [config, answerRows, documents, history] = await Promise.all([
     loadPackageConfig(app.packageId),
     db.applicationAnswer.findMany({ where: { applicationId: app.id } }),
     db.applicationDocument.findMany({ where: { applicationId: app.id }, orderBy: { createdAt: "desc" } }),
+    // Client-facing history only: status + the message written for the client. Internal notes are a separate table.
+    db.applicationStatusHistory.findMany({
+      where: { applicationId: app.id }, orderBy: { createdAt: "asc" },
+      select: { fromStatus: true, toStatus: true, note: true, isOverride: true, createdAt: true },
+    }),
   ]);
   const answers = answersToMap(answerRows);
   const slots = documentSlots(config.docReqs, config.questions, answers);
@@ -131,7 +137,7 @@ export async function getApplicationView(actor: Actor, applicationId: string) {
     applicant: app.applicant as Record<string, unknown>, questions: config.questions, answers, slots,
     uploadedSlotKeys: new Set(currentDocs.map((d) => d.requirementKey)),
   });
-  return { app, config, answers, steps, slots, documents, currentDocs, progress };
+  return { app, config, answers, steps, slots, documents, currentDocs, progress, history };
 }
 
 export async function listClientApplications(actor: Actor, opts: { take?: number; skip?: number } = {}) {
@@ -311,3 +317,42 @@ export async function submitApplication(actor: Actor, applicationId: string): Pr
 
 export type WizardView = Awaited<ReturnType<typeof getApplicationView>>;
 export type { StepDef };
+
+// ---------------------------------------------------------------------------
+// Client dashboard
+// ---------------------------------------------------------------------------
+
+const ACTIVE_EXCLUDED = ["DRAFT", "APPROVED", "REFUSED", "COMPLETED", "CANCELLED"] as const;
+
+/** Everything the dashboard needs in three queries, all scoped to the acting client. */
+export async function getClientDashboard(actor: Actor) {
+  requireClient(actor);
+  const [apps, flagged] = await Promise.all([
+    db.visaApplication.findMany({
+      where: { clientId: actor.id }, orderBy: { updatedAt: "desc" }, take: 50,
+      select: { id: true, applicationNumber: true, packageName: true, packageCountry: true, status: true, progressPercent: true, updatedAt: true, submittedAt: true },
+    }),
+    db.applicationDocument.findMany({
+      where: { isCurrent: true, status: { in: ["REJECTED", "REPLACEMENT_REQUIRED"] }, application: { clientId: actor.id } },
+      select: { id: true, name: true, status: true, rejectionReason: true, applicationId: true },
+    }),
+  ]);
+  const flaggedByApp = new Map<string, typeof flagged>();
+  for (const d of flagged) flaggedByApp.set(d.applicationId, [...(flaggedByApp.get(d.applicationId) ?? []), d]);
+
+  const items = apps.map((a) => {
+    const docs = flaggedByApp.get(a.id) ?? [];
+    return { ...a, documentsToReplace: docs, action: nextAction({ status: a.status, progressPercent: a.progressPercent, documentsToReplace: docs.map((d) => d.name) }) };
+  });
+  const current = items.find((i) => i.action?.urgent) ?? items.find((i) => !isTerminal(i.status)) ?? null;
+  return {
+    items,
+    current,
+    counts: {
+      active: items.filter((i) => !(ACTIVE_EXCLUDED as readonly string[]).includes(i.status)).length,
+      documentsRequired: flagged.length + items.filter((i) => i.status === "DOCUMENTS_REQUIRED" && !(flaggedByApp.get(i.id)?.length)).length,
+      pendingPayments: items.filter((i) => i.status === "PAYMENT_PENDING").length,
+      completed: items.filter((i) => i.status === "COMPLETED" || i.status === "APPROVED" || i.status === "REFUSED").length,
+    },
+  };
+}

@@ -5,6 +5,7 @@ import { can } from "@/lib/auth/permissions";
 import { requireClient, type Actor } from "@/lib/auth/actor";
 import { documentSlots } from "@/lib/applications/engine";
 import { MIME_BY_FORMAT, effectiveMaxBytes, newStorageKey, safeFilename, sniffFormat } from "@/lib/applications/files";
+import { isTerminal } from "@/lib/applications/next-action";
 import { CLIENT_UPLOAD_STATUSES } from "@/lib/applications/status";
 import { getPrivateStorage } from "@/lib/storage/private-documents";
 import { recordAudit } from "./audit";
@@ -25,7 +26,11 @@ export interface UploadInput {
  */
 export async function uploadDocument(actor: Actor, input: UploadInput) {
   const app = await getOwnedApplication(actor, input.applicationId);
-  if (!CLIENT_UPLOAD_STATUSES.includes(app.status)) {
+  const previous = await db.applicationDocument.findFirst({ where: { applicationId: app.id, requirementKey: input.requirementKey, isCurrent: true } });
+  // Uploads are open in draft / "documents required" states, and a document staff asked to be replaced
+  // can always be replaced (unless the application is finished).
+  const replacementRequested = previous?.status === "REJECTED" || previous?.status === "REPLACEMENT_REQUIRED";
+  if (!CLIENT_UPLOAD_STATUSES.includes(app.status) && !(replacementRequested && !isTerminal(app.status))) {
     throw new AppError("Documents can't be changed for this application right now.", "FORBIDDEN");
   }
 
@@ -45,7 +50,6 @@ export async function uploadDocument(actor: Actor, input: UploadInput) {
     throw new AppError(`Unsupported file type. Accepted formats: ${slot.acceptedFormats.map((f) => f.toUpperCase()).join(", ")}.`, "VALIDATION");
   }
 
-  const previous = await db.applicationDocument.findFirst({ where: { applicationId: app.id, requirementKey: slot.key, isCurrent: true } });
   if (previous?.status === "APPROVED") {
     throw new AppError("This document has already been approved and can't be replaced.", "FORBIDDEN");
   }
@@ -69,6 +73,19 @@ export async function uploadDocument(actor: Actor, input: UploadInput) {
         },
       });
       await recomputeProgress(tx, app.id, config);
+
+      // Once every requested replacement is in, hand the application back to staff for review.
+      if (app.status === "DOCUMENTS_REQUIRED") {
+        const outstanding = await tx.applicationDocument.count({ where: { applicationId: app.id, isCurrent: true, status: { in: ["REJECTED", "REPLACEMENT_REQUIRED"] } } });
+        if (outstanding === 0) {
+          const moved = await tx.visaApplication.updateMany({ where: { id: app.id, status: "DOCUMENTS_REQUIRED" }, data: { status: "DOCUMENTS_UNDER_REVIEW" } });
+          if (moved.count === 1) {
+            await tx.applicationStatusHistory.create({
+              data: { applicationId: app.id, fromStatus: "DOCUMENTS_REQUIRED", toStatus: "DOCUMENTS_UNDER_REVIEW", changedById: actor.id, note: "Updated documents received from client" },
+            });
+          }
+        }
+      }
       return doc;
     });
     await recordAudit({

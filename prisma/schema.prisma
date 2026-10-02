@@ -48,10 +48,13 @@ model User {
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
-  clientProfile       ClientProfile?
-  auditLogs           AuditLog[]
-  applications        VisaApplication[]
-  passwordResetTokens PasswordResetToken[]
+  clientProfile        ClientProfile?
+  auditLogs            AuditLog[]
+  applications         VisaApplication[]    @relation("ApplicationClient")
+  /// Applications assigned to this staff member (STAFF users only see these).
+  assignedApplications VisaApplication[]    @relation("ApplicationAssignee")
+  applicationNotes     ApplicationNote[]
+  passwordResetTokens  PasswordResetToken[]
 
   @@index([role, isActive])
   @@index([createdAt])
@@ -306,15 +309,23 @@ model VisaApplication {
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
 
-  client  User          @relation(fields: [clientId], references: [id], onDelete: Restrict)
-  package TravelPackage @relation(fields: [packageId], references: [id], onDelete: Restrict)
+  /// Staff member responsible for this application. STAFF users only see applications assigned
+  /// to them; ADMIN / SUPER_ADMIN see everything.
+  assignedToId String?
+  assignedAt   DateTime?
+
+  client     User          @relation("ApplicationClient", fields: [clientId], references: [id], onDelete: Restrict)
+  package    TravelPackage @relation(fields: [packageId], references: [id], onDelete: Restrict)
+  assignedTo User?         @relation("ApplicationAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
 
   answers       ApplicationAnswer[]
   documents     ApplicationDocument[]
   statusHistory ApplicationStatusHistory[]
+  notes         ApplicationNote[]
 
   @@index([clientId, status])
   @@index([clientId, updatedAt])
+  @@index([assignedToId, status])
   @@index([packageId, status])
   @@index([status, updatedAt])
   @@index([createdAt])
@@ -343,10 +354,27 @@ model ApplicationStatusHistory {
   fromStatus    ApplicationStatus?
   toStatus      ApplicationStatus
   changedById   String?
+  /// Shown to the client on their timeline: write it as a message to them.
   note          String?
+  /// True when staff moved the application outside the normal workflow transitions.
+  isOverride    Boolean            @default(false)
   createdAt     DateTime           @default(now())
 
   application VisaApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId, createdAt])
+}
+
+/// INTERNAL staff notes. Never returned by any client-facing query.
+model ApplicationNote {
+  id            String   @id @default(cuid())
+  applicationId String
+  authorId      String?
+  body          String
+  createdAt     DateTime @default(now())
+
+  application VisaApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  author      User?           @relation(fields: [authorId], references: [id], onDelete: SetNull)
 
   @@index([applicationId, createdAt])
 }

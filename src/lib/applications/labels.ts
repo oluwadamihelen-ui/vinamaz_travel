@@ -35,3 +35,5 @@ export const DOC_STATUS_LABEL: Record<DocumentStatus, string> = {
 export const DOC_STATUS_TONE: Record<DocumentStatus, "neutral" | "gold" | "info" | "ok" | "danger"> = {
   UPLOADED: "info", UNDER_REVIEW: "info", APPROVED: "ok", REJECTED: "danger", REPLACEMENT_REQUIRED: "gold",
 };
+
+export const APPLICATION_STATUSES = Object.keys(STATUS_LABEL) as ApplicationStatus[];

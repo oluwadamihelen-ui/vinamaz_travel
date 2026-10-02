@@ -54,3 +54,14 @@ export async function completeApplication(client: Actor, id: string) {
   await saveApplicationStep(client, id, "s-passport", { passport_number: "A1234567" }, { advance: true });
   await uploadDocument(client, { applicationId: id, requirementKey: "international_passport", filename: "passport.pdf", bytes: PDF });
 }
+
+/** Start, complete and submit an application for `client`; returns its id. */
+export async function submittedApplication(client: Actor, packageSlug: string): Promise<string> {
+  const { startApplication, submitApplication } = await import("@/lib/services/applications");
+  const { id } = await startApplication(client, packageSlug);
+  await completeApplication(client, id);
+  await submitApplication(client, id);
+  return id;
+}
+
+export const STAFF_PERMS = ["applications.view", "applications.manage", "applications.status_update", "applications.assign", "documents.view", "documents.review"];

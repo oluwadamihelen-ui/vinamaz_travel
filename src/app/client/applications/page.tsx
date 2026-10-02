@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { ApplicationCard } from "@/components/apply/application-card";
 import { requireClientPage } from "@/lib/auth/session";
-import { listClientApplications } from "@/lib/services/applications";
+import { getClientDashboard } from "@/lib/services/applications";
 import { Card } from "@/components/ui/misc";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 
 export default async function ApplicationsPage() {
   const actor = await requireClientPage();
-  const { items } = await listClientApplications(actor);
+  const { items } = await getClientDashboard(actor);
   return (
     <div className="space-y-6">
       <h1 className="text-3xl font-semibold">My applications</h1>

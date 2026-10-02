@@ -23,3 +23,15 @@ export function passwordResetEmail(opts: { name: string; link: string; minutes: 
   const text = `Hi ${first},\n\nWe received a request to reset your Vinamaz password. Choose a new password here (works once, expires in ${opts.minutes} minutes):\n\n${opts.link}\n\nIf you didn't ask for this, ignore this email.\n\nVinamaz Travels`;
   return { subject: "Reset your Vinamaz password", html, text };
 }
+
+export function staffInviteEmail(opts: { name: string; link: string; hours: number }) {
+  const first = opts.name.split(" ")[0] ?? "there";
+  const html = layout(
+    "You've been invited to Vinamaz Travels",
+    `<p style="font-size:15px;line-height:1.6">Hi ${esc(first)}, an account has been created for you on the Vinamaz staff portal. Choose a password to get started.</p>
+<p style="margin:24px 0"><a href="${esc(opts.link)}" style="background:#b01012;color:#fff;padding:14px 26px;border-radius:999px;text-decoration:none;font-weight:600;display:inline-block">Set your password</a></p>
+<p style="font-size:13px;line-height:1.6;color:#665557">This link works once and expires in ${opts.hours} hours. If it has expired, use "Forgot password?" on the sign-in page.</p>`,
+  );
+  const text = `Hi ${first},\n\nAn account has been created for you on the Vinamaz staff portal. Set your password here (works once, expires in ${opts.hours} hours):\n\n${opts.link}\n\nVinamaz Travels`;
+  return { subject: "You've been invited to Vinamaz Travels", html, text };
+}
