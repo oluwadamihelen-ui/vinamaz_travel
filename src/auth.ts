@@ -19,7 +19,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         const h = await headers();
         const ip = h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
-        if (!rateLimit(`login:${ip}:${email}`, 8, 10 * 60 * 1000).ok) return null;
+        if (!(await rateLimit(`login:${ip}:${email}`, 8, 10 * 60 * 1000)).ok) return null;
 
         const user = await db.user.findUnique({ where: { email } });
         // Always run a hash verification so response time doesn't reveal whether the account exists.

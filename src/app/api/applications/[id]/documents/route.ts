@@ -12,7 +12,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   try {
     const actor = await getActor();
     if (!actor) return NextResponse.json({ error: "Please sign in to continue." }, { status: 401 });
-    if (!rateLimit(`upload:${actor.id}`, 60, 10 * 60 * 1000).ok) {
+    if (!(await rateLimit(`upload:${actor.id}`, 60, 10 * 60 * 1000)).ok) {
       return NextResponse.json({ error: "Too many uploads. Please wait a few minutes and try again." }, { status: 429 });
     }
     // Reject oversized bodies before buffering them.

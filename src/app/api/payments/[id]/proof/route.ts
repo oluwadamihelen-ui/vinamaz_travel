@@ -32,7 +32,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   try {
     const actor = await getActor();
     if (!actor) return NextResponse.json({ error: "Please sign in to continue." }, { status: 401 });
-    if (!rateLimit(`proof:${actor.id}`, 20, 10 * 60_000).ok) return NextResponse.json({ error: "Too many uploads. Please wait a few minutes." }, { status: 429 });
+    if (!(await rateLimit(`proof:${actor.id}`, 20, 10 * 60_000)).ok) return NextResponse.json({ error: "Too many uploads. Please wait a few minutes." }, { status: 429 });
     if (Number(request.headers.get("content-length") ?? 0) > MAX_SERVER_UPLOAD_BYTES + 64 * 1024) return NextResponse.json({ error: "That file is too large." }, { status: 413 });
     const form = await request.formData();
     const file = form.get("file");

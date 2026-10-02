@@ -55,6 +55,7 @@ model User {
   assignedApplications VisaApplication[]    @relation("ApplicationAssignee")
   applicationNotes     ApplicationNote[]
   payments             Payment[]            @relation("PaymentClient")
+  notifications        Notification[]
   passwordResetTokens  PasswordResetToken[]
 
   @@index([role, isActive])
@@ -310,10 +311,14 @@ model VisaApplication {
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
 
+  /// The package's questions and document requirements as they were when the application started,
+  /// so later edits to the package never change an application already in progress. Null for
+  /// applications that predate snapshots (they fall back to the live package).
+  configSnapshot Json?
   /// Staff member responsible for this application. STAFF users only see applications assigned
   /// to them; ADMIN / SUPER_ADMIN see everything.
-  assignedToId String?
-  assignedAt   DateTime?
+  assignedToId   String?
+  assignedAt     DateTime?
 
   client     User          @relation("ApplicationClient", fields: [clientId], references: [id], onDelete: Restrict)
   package    TravelPackage @relation(fields: [packageId], references: [id], onDelete: Restrict)
@@ -324,6 +329,7 @@ model VisaApplication {
   statusHistory ApplicationStatusHistory[]
   notes         ApplicationNote[]
   payments      Payment[]
+  messages      ApplicationMessage[]
 
   @@index([clientId, status])
   @@index([clientId, updatedAt])
@@ -563,7 +569,108 @@ model BankAccount {
 
 /// Lets an administrator switch a payment method off without touching environment variables.
 model PaymentMethodSetting {
-  method    PaymentMethod @id
-  enabled   Boolean       @default(true)
-  updatedAt DateTime      @updatedAt
+  method     PaymentMethod @id
+  enabled    Boolean       @default(true)
+  /// Currencies this method may be offered for. Empty = the built-in defaults for the gateway.
+  currencies String[]      @default([])
+  updatedAt  DateTime      @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// Messaging, notifications, uploads, rate limiting (Phase 5)
+// ---------------------------------------------------------------------------
+
+enum MessageSender {
+  CLIENT
+  STAFF
+}
+
+/// A message in the conversation attached to ONE application. Clients only ever see messages of
+/// their own applications; staff see those inside their scope. `readAt` is when the RECIPIENT
+/// side opened it (client messages are read by staff, staff messages by the client).
+model ApplicationMessage {
+  id            String        @id @default(cuid())
+  applicationId String
+  senderId      String?
+  senderRole    MessageSender
+  body          String
+  readAt        DateTime?
+  createdAt     DateTime      @default(now())
+
+  application VisaApplication                @relation(fields: [applicationId], references: [id], onDelete: Restrict)
+  attachments ApplicationMessageAttachment[]
+
+  @@index([applicationId, createdAt])
+  @@index([applicationId, senderRole, readAt])
+  @@index([senderRole, readAt, createdAt])
+}
+
+model ApplicationMessageAttachment {
+  id         String   @id @default(cuid())
+  messageId  String
+  storageKey String   @unique
+  filename   String
+  mimeType   String
+  sizeBytes  Int
+  createdAt  DateTime @default(now())
+
+  message ApplicationMessage @relation(fields: [messageId], references: [id], onDelete: Restrict)
+
+  @@index([messageId])
+}
+
+/// In-app notification for one user.
+model Notification {
+  id            String    @id @default(cuid())
+  userId        String
+  /// Machine key, e.g. "payment.confirmed", "message.received".
+  type          String
+  title         String
+  body          String?
+  href          String?
+  applicationId String?
+  readAt        DateTime?
+  createdAt     DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt, createdAt])
+  @@index([createdAt])
+}
+
+enum UploadKind {
+  DOCUMENT
+  PAYMENT_PROOF
+  MESSAGE_ATTACHMENT
+}
+
+/// A server-authorised upload slot. The server decides the storage key, size limit and owner BEFORE
+/// the browser sends bytes straight to private storage; completing it re-validates the stored file.
+model PendingUpload {
+  id             String     @id @default(cuid())
+  kind           UploadKind
+  userId         String
+  applicationId  String?
+  paymentId      String?
+  requirementKey String?
+  storageKey     String     @unique
+  filename       String
+  declaredSize   Int
+  maxBytes       Int
+  expiresAt      DateTime
+  completedAt    DateTime?
+  createdAt      DateTime   @default(now())
+
+  @@index([userId, createdAt])
+  @@index([expiresAt])
+}
+
+/// Fixed-window rate limiting shared across all serverless instances (state lives in Postgres).
+model RateLimitBucket {
+  key         String   @id
+  windowStart DateTime
+  count       Int      @default(0)
+  updatedAt   DateTime @updatedAt
+
+  @@index([updatedAt])
 }

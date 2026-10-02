@@ -22,7 +22,7 @@ export interface FormState {
 export async function registerAction(_prev: FormState, formData: FormData): Promise<FormState> {
   const h = await headers();
   const ip = h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
-  if (!rateLimit(`register:${ip}`, 10, 60 * 60 * 1000).ok) {
+  if (!(await rateLimit(`register:${ip}`, 10, 60 * 60 * 1000)).ok) {
     return { error: "Too many attempts. Please try again later." };
   }
   const raw = Object.fromEntries(formData.entries());
@@ -71,7 +71,7 @@ export async function forgotPasswordAction(_prev: FormState & { sent?: boolean }
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   if (!email) return { error: "Enter your email address." };
   const ip = await clientIp();
-  if (!rateLimit(`forgot:ip:${ip}`, 10, 60 * 60 * 1000).ok || !rateLimit(`forgot:email:${email}`, 3, 60 * 60 * 1000).ok) {
+  if (!(await rateLimit(`forgot:ip:${ip}`, 10, 60 * 60 * 1000)).ok || !(await rateLimit(`forgot:email:${email}`, 3, 60 * 60 * 1000)).ok) {
     return { error: "Too many requests. Please try again later." };
   }
   try {
@@ -83,7 +83,7 @@ export async function forgotPasswordAction(_prev: FormState & { sent?: boolean }
 }
 
 export async function resetPasswordAction(token: string, _prev: FormState, formData: FormData): Promise<FormState> {
-  if (!rateLimit(`reset:ip:${await clientIp()}`, 20, 60 * 60 * 1000).ok) return { error: "Too many attempts. Please try again later." };
+  if (!(await rateLimit(`reset:ip:${await clientIp()}`, 20, 60 * 60 * 1000)).ok) return { error: "Too many attempts. Please try again later." };
   try {
     await resetPassword(token, String(formData.get("password") ?? ""), String(formData.get("confirmPassword") ?? ""));
   } catch (e) {

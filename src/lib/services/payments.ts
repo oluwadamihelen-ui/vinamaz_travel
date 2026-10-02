@@ -119,7 +119,7 @@ export async function startGatewayPayment(actor: Actor, paymentId: string, metho
   const gateway = getGateway(method);
   const available = await getAvailableMethods(payment.currency);
   if (!gateway || !available.some((m) => m.method === gateway.method)) throw new AppError("That payment method isn't available right now.", "VALIDATION");
-  if (!rateLimit(`pay:${actor.id}`, 20, 10 * 60_000).ok) throw new AppError("Too many payment attempts. Please wait a few minutes.", "VALIDATION");
+  if (!(await rateLimit(`pay:${actor.id}`, 20, 10 * 60_000)).ok) throw new AppError("Too many payment attempts. Please wait a few minutes.", "VALIDATION");
 
   const user = await db.user.findUniqueOrThrow({ where: { id: actor.id }, select: { email: true, name: true, phone: true } });
   const attempt = (await db.paymentTransaction.count({ where: { paymentId: payment.id, event: "initialize" } })) + 1;

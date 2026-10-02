@@ -3,6 +3,10 @@ import type { Actor } from "@/lib/auth/actor";
 import type { Role } from "@/generated/prisma/enums";
 
 export async function resetDb() {
+  await db.pendingUpload.deleteMany();
+  await db.applicationMessageAttachment.deleteMany();
+  await db.applicationMessage.deleteMany();
+  await db.notification.deleteMany();
   await db.paymentTransaction.deleteMany();
   await db.payment.deleteMany();
   await db.bankAccount.deleteMany();
