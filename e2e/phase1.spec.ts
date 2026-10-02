@@ -71,7 +71,8 @@ test("admin creates an active package, it appears publicly, then is deactivated"
   await page.getByLabel("Email address").fill(ADMIN.email);
   await page.getByLabel("Password", { exact: true }).fill(ADMIN.password);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page).toHaveURL(/\/admin\/packages/);
+  await expect(page).toHaveURL(/\/admin\/applications/); // landing page for staff who can view applications
+  await page.goto("/admin/packages");
 
   const name = `E2E Test Package ${unique()}`;
   await page.getByRole("link", { name: "New package" }).click();
