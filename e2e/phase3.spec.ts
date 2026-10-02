@@ -100,6 +100,8 @@ test("document review workflow across client, admin and restricted staff", async
 
   // 4. admin finds the application, assigns it, starts the review
   await admin.page.goto("/admin/applications");
+  const toggle = admin.page.getByRole("button", { name: /Search & filters/ });
+  if (await toggle.isVisible()) await toggle.click(); // filters fold away on phones
   await admin.page.getByLabel("Search").fill(clientEmail);
   await admin.page.getByRole("button", { name: "Apply filters" }).click();
   await admin.page.getByRole("link", { name: /VNZ-\d{4}-\d{6}/ }).first().click();
@@ -139,7 +141,7 @@ test("document review workflow across client, admin and restricted staff", async
   await expect(client.page.getByRole("listitem").filter({ hasText: "Documents reviewed" }).first()).toHaveAttribute("aria-current", "step");
 
   // 7. client uploads a replacement → application returns to review
-  await client.page.locator('input[type="file"]').setInputFiles({ name: "passport-clear.pdf", mimeType: "application/pdf", buffer: PDF });
+  await client.page.locator("#file-international_passport").setInputFiles({ name: "passport-clear.pdf", mimeType: "application/pdf", buffer: PDF });
   await expect(client.page.getByText("Uploaded · under review soon")).toBeVisible();
   await client.page.reload();
   await expect(client.page.getByText("Documents under review").first()).toBeVisible();

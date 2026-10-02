@@ -6,7 +6,7 @@ import http from "node:http";
 const PORT = 4010;
 const SECRET = process.env.PAYSTACK_SECRET_KEY ?? "sk_test_e2e";
 const txs = new Map();
-let nextId = 1000; // real gateways give every transaction a unique id; webhook de-duplication relies on it
+let nextId = Date.now() % 1_000_000_000; // unique across restarts too (the app de-duplicates webhooks by id) // real gateways give every transaction a unique id; webhook de-duplication relies on it
 
 const send = (res, status, body, type = "application/json") => { res.writeHead(status, { "content-type": type }); res.end(typeof body === "string" ? body : JSON.stringify(body)); };
 

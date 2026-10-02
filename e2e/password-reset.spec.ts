@@ -27,6 +27,7 @@ test("forgot password → emailed link → new password → sign in; link is sin
   await expect(page.getByRole("heading", { name: "Hello, Reset" })).toBeVisible();
   await page.getByRole("button", { name: /sign out/i }).click();
   await expect(page).toHaveURL("/");
+  await expect(page.getByRole("link", { name: "Create account" }).first()).toBeVisible(); // header confirms we're signed out
 
   await page.goto("/login");
   await page.getByRole("link", { name: "Forgot password?" }).click();

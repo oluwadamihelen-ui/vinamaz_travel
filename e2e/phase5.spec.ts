@@ -111,7 +111,7 @@ test("messaging with attachments, notifications, dashboard and audit log", async
   await expect(admin.page.getByRole("heading", { name: "Audit log" })).toBeVisible();
   await admin.page.getByLabel("Action").selectOption("message.sent");
   await admin.page.getByRole("button", { name: "Apply filters" }).click();
-  await expect(admin.page.getByText("message.sent").first()).toBeVisible();
+  await expect(admin.page.getByText("message.sent", { exact: true }).first()).toBeAttached(); // rows are collapsed <details>
 });
 
 test("a plain client can't open staff pages, and the public header adapts to the session", async ({ browser, baseURL }) => {
