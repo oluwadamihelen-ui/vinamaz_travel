@@ -1,0 +1,16 @@
+node_modules
+.next
+out
+.env
+.env.*
+!.env.example
+src/generated
+*.tsbuildinfo
+next-env.d.ts
+coverage
+playwright-report
+test-results
+.vercel
+# Package marketing images uploaded in local development only (production uses Vercel Blob)
+public/package-images/*
+!public/package-images/.gitkeep

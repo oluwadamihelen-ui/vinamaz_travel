@@ -1,0 +1,253 @@
+// Vinamaz — Phase 1 schema
+//
+// Conventions
+//  - Internal primary keys are CUIDs. Public identifiers (e.g. VNZ-2026-000001)
+//    are separate columns added in the models that need them (Phase 2).
+//  - Every table has createdAt; mutable tables have updatedAt.
+//  - Deletion: owned child rows cascade from their parent; references to users
+//    from audit/history rows are SET NULL so history survives user removal.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Users & authorization
+// ---------------------------------------------------------------------------
+
+enum Role {
+  CLIENT
+  STAFF
+  ADMIN
+  SUPER_ADMIN
+}
+
+/// One account table for clients and staff. Authorization = role defaults
+/// (see src/lib/auth/permissions.ts) + per-user extra grants in `permissions`.
+model User {
+  id              String    @id @default(cuid())
+  /// Always stored lower-cased and trimmed.
+  email           String    @unique
+  name            String
+  phone           String?
+  passwordHash    String
+  role            Role      @default(CLIENT)
+  /// Additional permission keys granted to this user on top of the role defaults
+  /// (primarily used for STAFF). Validated against the permission catalogue in code.
+  permissions     String[]  @default([])
+  isActive        Boolean   @default(true)
+  emailVerifiedAt DateTime?
+  lastLoginAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  clientProfile ClientProfile?
+  auditLogs     AuditLog[]
+
+  @@index([role, isActive])
+  @@index([createdAt])
+}
+
+/// Personal details that belong to the client (not to a single application).
+/// Application-specific answers live on the application (Phase 2).
+model ClientProfile {
+  id                 String    @id @default(cuid())
+  userId             String    @unique
+  whatsapp           String?
+  dateOfBirth        DateTime? @db.Date
+  nationality        String?
+  countryOfResidence String
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ---------------------------------------------------------------------------
+// Travel packages (fully database-driven; no package content lives in code)
+// ---------------------------------------------------------------------------
+
+enum PackageStatus {
+  /// Being configured; never shown publicly.
+  DRAFT
+  /// Visible on the public site and open for applications.
+  ACTIVE
+  /// Previously active, hidden from the public site.
+  INACTIVE
+}
+
+model TravelPackage {
+  id   String @id @default(cuid())
+  slug String @unique
+
+  name     String
+  country  String
+  /// Free-form so new kinds of packages need no code change (e.g. "Visa assistance").
+  category String?
+
+  shortDescription String?
+  description      String?
+
+  /// Public marketing image (not sensitive). Applicant documents never use this field.
+  imageUrl String?
+  imageAlt String?
+
+  /// All money fields are optional: unknown values stay null and are never displayed.
+  price          Decimal? @db.Decimal(12, 2)
+  applicationFee Decimal? @db.Decimal(12, 2)
+  serviceFee     Decimal? @db.Decimal(12, 2)
+  currency       String   @default("NGN") @db.VarChar(3)
+
+  processingEstimate String?
+  inclusions         String[] @default([])
+  exclusions         String[] @default([])
+  importantInfo      String?
+  terms              String?
+  /// [{ "question": string, "answer": string }] — validated with Zod on write.
+  faqs               Json     @default("[]")
+
+  status       PackageStatus @default(DRAFT)
+  isFeatured   Boolean       @default(false)
+  displayOrder Int           @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  requirements         PackageRequirement[]
+  documentRequirements PackageDocumentRequirement[]
+  questions            PackageQuestion[]
+
+  @@index([status, displayOrder])
+  @@index([status, isFeatured])
+  @@index([country])
+}
+
+enum RequirementType {
+  ELIGIBILITY
+  REQUIREMENT
+}
+
+model PackageRequirement {
+  id          String          @id @default(cuid())
+  packageId   String
+  type        RequirementType @default(REQUIREMENT)
+  title       String
+  description String?
+  sortOrder   Int             @default(0)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  package TravelPackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+
+  @@index([packageId, type, sortOrder])
+}
+
+/// Documents a client is asked to upload for this package (upload itself: Phase 2).
+model PackageDocumentRequirement {
+  id              String   @id @default(cuid())
+  packageId       String
+  /// Stable machine key within the package, e.g. "passport_bio_page".
+  key             String
+  name            String
+  description     String?
+  isRequired      Boolean  @default(true)
+  acceptedFormats String[] @default(["pdf", "jpg", "png"])
+  maxSizeMb       Int      @default(10)
+  sortOrder       Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  package TravelPackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+
+  @@unique([packageId, key])
+  @@index([packageId, sortOrder])
+}
+
+enum QuestionType {
+  TEXT
+  TEXTAREA
+  DATE
+  NUMBER
+  SELECT
+  MULTI_SELECT
+  RADIO
+  CHECKBOX
+  COUNTRY
+  PHONE
+  EMAIL
+  FILE
+}
+
+/// Package-specific application questions (answers: Phase 2).
+model PackageQuestion {
+  id         String       @id @default(cuid())
+  packageId  String
+  /// Stable machine key within the package; answers reference it.
+  key        String
+  label      String
+  helpText   String?
+  type       QuestionType @default(TEXT)
+  isRequired Boolean      @default(false)
+  /// Wizard section this question is shown in, e.g. "Employment / Education".
+  section    String?
+  sortOrder  Int          @default(0)
+  /// Conditional display: { "questionKey": string, "operator": "equals"|"notEquals"|"in", "value": string|string[] }
+  condition  Json?
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  package TravelPackage           @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  options PackageQuestionOption[]
+
+  @@unique([packageId, key])
+  @@index([packageId, sortOrder])
+}
+
+model PackageQuestionOption {
+  id         String   @id @default(cuid())
+  questionId String
+  value      String
+  label      String
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  question PackageQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([questionId, value])
+  @@index([questionId, sortOrder])
+}
+
+// ---------------------------------------------------------------------------
+// Infrastructure
+// ---------------------------------------------------------------------------
+
+/// Per-year counter backing public application numbers (VNZ-YYYY-NNNNNN).
+/// Incremented with a single atomic INSERT ... ON CONFLICT DO UPDATE ... RETURNING
+/// statement, so concurrent transactions can never receive the same value.
+model ApplicationCounter {
+  year      Int      @id
+  lastValue Int      @default(0)
+  updatedAt DateTime @updatedAt
+}
+
+/// Important administrative / security events. Not for UI noise.
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  action     String
+  entityType String
+  entityId   String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId])
+  @@index([actorId, createdAt])
+  @@index([action, createdAt])
+}
