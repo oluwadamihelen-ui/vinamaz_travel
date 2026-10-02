@@ -36,11 +36,12 @@ After the first successful deploy, run the seed once from your machine against t
 
     DATABASE_URL="<neon url>" SEED_SUPER_ADMIN_EMAIL="you@vinamaz.com" SEED_SUPER_ADMIN_PASSWORD="<12+ chars>" npm run db:seed
 
-On **Windows cmd** (no quotes around values; avoid `&` in the password; close the window afterwards):
+On **Windows cmd** wrap the whole assignment in quotes, otherwise `&` in the URL (e.g. `&channel_binding=require`)
+is treated as a command separator. Close the window afterwards:
 
-    set DATABASE_URL=<neon url>
-    set SEED_SUPER_ADMIN_EMAIL=you@vinamaz.com
-    set SEED_SUPER_ADMIN_PASSWORD=<12+ chars>
+    set "DATABASE_URL=<neon url>"
+    set "SEED_SUPER_ADMIN_EMAIL=you@vinamaz.com"
+    set "SEED_SUPER_ADMIN_PASSWORD=<12+ chars, avoid % ^ &>"
     npm run db:seed
 
 On **PowerShell**: `$env:DATABASE_URL="<neon url>"` (same for the other two), then `npm run db:seed`.
