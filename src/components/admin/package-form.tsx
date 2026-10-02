@@ -88,7 +88,7 @@ export function PackageForm({ id, initial }: { id: string | null; initial: Packa
         <Field label="Full description" htmlFor="description" hint="Blank lines create paragraphs."><Textarea id="description" className="min-h-40" value={d.description} onChange={(e) => set("description", e.target.value)} /></Field>
       </SectionCard>
 
-      <SectionCard title="Package image" hint="Public marketing image (JPG, PNG or WebP, up to 5MB). Never upload applicant documents here.">
+      <SectionCard title="Package image" hint="Public marketing image (JPG, PNG or WebP, up to 4MB). Never upload applicant documents here.">
         {d.imageUrl && (
           <div className="flex items-center gap-4">
             <div className="relative h-24 w-36 overflow-hidden rounded-xl border border-line"><Image src={d.imageUrl} alt="" fill sizes="144px" className="object-cover" unoptimized /></div>
