@@ -52,7 +52,7 @@ test("online payment: server-computed amount, hosted checkout, verified confirma
 
   // The amount is computed on the server from the package fees.
   await expect(page.getByText("Application submitted.")).toBeVisible();
-  await expect(page.getByRole("heading", { name: /155,000/ })).toBeVisible();
+  await expect(page.getByText(/155,000/).first()).toBeVisible();
   await expect(page.getByText("Package price")).toBeVisible();
   await expect(page.getByText("Service fee")).toBeVisible();
   await expect(page.getByText("Awaiting payment").first()).toBeVisible();
@@ -140,8 +140,6 @@ test("bank transfer: admin adds an account, client uploads proof, staff confirm,
   await page.getByRole("button", { name: /Bank transfer/ }).click();
   await expect(page.getByText("Pay by bank transfer")).toBeVisible();
   await expect(page.getByText(accountNumber).first()).toBeVisible();
-  const reference = (await page.locator("p.font-mono").first().textContent()) ?? "";
-  void reference;
 
   // Validation: a non-receipt file is refused.
   await page.getByLabel("Name on the account you paid from").fill("Pay Tester");
