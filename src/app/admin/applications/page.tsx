@@ -4,7 +4,7 @@ import { Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/form";
 import { Badge, Card } from "@/components/ui/misc";
-import { APPLICATION_STATUSES, STATUS_LABEL, STATUS_TONE } from "@/lib/applications/labels";
+import { APPLICATION_STATUSES, PAYMENT_STATUS_LABEL, PAYMENT_STATUS_TONE, STATUS_LABEL, STATUS_TONE } from "@/lib/applications/labels";
 import { requireStaffPage } from "@/lib/auth/session";
 import { getApplicationFilterOptions, listAdminApplications } from "@/lib/services/admin-applications";
 import type { ApplicationStatus } from "@/generated/prisma/enums";
@@ -95,7 +95,7 @@ export default async function AdminApplicationsPage({ searchParams }: { searchPa
                     <td className="px-4 py-3"><p className="font-medium">{a.client.name}</p><p className="text-xs text-ink-3">{a.client.email}</p></td>
                     <td className="px-4 py-3"><p>{a.packageName}</p><p className="text-xs text-ink-3">{a.packageCountry}</p></td>
                     <td className="px-4 py-3"><Badge tone={STATUS_TONE[a.status]}>{STATUS_LABEL[a.status]}</Badge></td>
-                    <td className="px-4 py-3 text-ink-3">—</td>
+                    <td className="px-4 py-3">{a.payments[0] ? <Badge tone={PAYMENT_STATUS_TONE[a.payments[0].status]}>{PAYMENT_STATUS_LABEL[a.payments[0].status]}</Badge> : <span className="text-ink-3">—</span>}</td>
                     <td className="px-4 py-3"><span className="font-medium">{a.progressPercent}%</span></td>
                     <td className="px-4 py-3">{a.assignedTo?.name ?? <span className="text-ink-3">Unassigned</span>}</td>
                     <td className="px-4 py-3 whitespace-nowrap text-ink-3">{fmt(a.createdAt)}</td>
@@ -114,7 +114,7 @@ export default async function AdminApplicationsPage({ searchParams }: { searchPa
                   <Badge tone={STATUS_TONE[a.status]}>{STATUS_LABEL[a.status]}</Badge>
                 </div>
                 <p className="mt-2 text-sm text-ink-3">{a.packageName} · {a.packageCountry}</p>
-                <p className="mt-1 text-sm text-ink-3">{a.progressPercent}% complete · {a.assignedTo?.name ?? "Unassigned"} · Updated {fmt(a.updatedAt)}</p>
+                <p className="mt-1 text-sm text-ink-3">{a.progressPercent}% complete · {a.payments[0] ? PAYMENT_STATUS_LABEL[a.payments[0].status] : "No payment"} · {a.assignedTo?.name ?? "Unassigned"} · Updated {fmt(a.updatedAt)}</p>
               </Link>
             ))}
           </div>

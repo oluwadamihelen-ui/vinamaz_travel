@@ -8,13 +8,14 @@ import type { NextAction } from "@/lib/applications/next-action";
 import type { ApplicationStatus } from "@/generated/prisma/enums";
 
 export interface ApplicationCardData {
-  id: string; applicationNumber: string; packageName: string; packageCountry: string;
+  id: string; paymentId?: string | null; applicationNumber: string; packageName: string; packageCountry: string;
   status: ApplicationStatus; progressPercent: number; updatedAt: Date;
   action?: NextAction | null;
 }
 
-export function actionHref(id: string, target: NextAction["target"]): string {
+export function actionHref(id: string, target: NextAction["target"], paymentId?: string | null): string {
   switch (target) {
+    case "payment": return paymentId ? `/client/payments/${paymentId}` : `/client/payments`;
     case "wizard": return `/client/applications/${id}/apply`;
     case "documents": return `/client/applications/${id}#documents`;
     default: return `/client/applications/${id}`;
@@ -52,7 +53,7 @@ export function ApplicationCard({ app, highlight = false }: { app: ApplicationCa
 
       <div className="mt-5 flex flex-wrap gap-3">
         {action?.urgent && action.target !== "detail" ? (
-          <Button asChild><Link href={actionHref(app.id, action.target)}>{draft ? "Continue application" : "Take action"} <ArrowRight className="size-4" /></Link></Button>
+          <Button asChild><Link href={actionHref(app.id, action.target, app.paymentId)}>{draft ? "Continue application" : action.target === "payment" ? "Pay now" : "Take action"} <ArrowRight className="size-4" /></Link></Button>
         ) : draft ? (
           <Button asChild><Link href={`/client/applications/${app.id}/apply`}>Continue application <ArrowRight className="size-4" /></Link></Button>
         ) : null}

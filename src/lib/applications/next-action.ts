@@ -12,10 +12,11 @@ const TERMINAL: ApplicationStatus[] = ["APPROVED", "REFUSED", "COMPLETED", "CANC
 export const isTerminal = (s: ApplicationStatus) => TERMINAL.includes(s);
 
 /** "What do I need to do?" for one application. Pure, so it's easy to test. */
-export function nextAction(input: { status: ApplicationStatus; progressPercent: number; documentsToReplace: string[] }): NextAction | null {
-  const { status, progressPercent, documentsToReplace } = input;
+export function nextAction(input: { status: ApplicationStatus; progressPercent: number; documentsToReplace: string[]; paymentDue?: string | null }): NextAction | null {
+  const { status, progressPercent, documentsToReplace, paymentDue } = input;
   if (status === "DRAFT") return { label: `Continue your application (${progressPercent}% complete)`, target: "wizard", urgent: true };
   if (isTerminal(status)) return null;
+  if (paymentDue) return { label: paymentDue, target: "payment", urgent: true };
   if (documentsToReplace.length === 1) return { label: `Upload updated ${documentsToReplace[0]}`, target: "documents", urgent: true };
   if (documentsToReplace.length > 1) return { label: `Upload ${documentsToReplace.length} updated documents`, target: "documents", urgent: true };
   if (status === "DOCUMENTS_REQUIRED") return { label: "Upload the documents we've requested", target: "documents", urgent: true };

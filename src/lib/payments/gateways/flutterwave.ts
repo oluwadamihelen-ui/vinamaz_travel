@@ -2,7 +2,8 @@ import { asRecord, gatewayRequest } from "../http";
 import { hmacBase64, safeEqual } from "../signatures";
 import { GatewayError, type PaymentGateway, type WebhookCheck } from "../types";
 
-const BASE = "https://api.flutterwave.com/v3";
+// Overridable for sandbox/mock testing; defaults to the live API.
+const base = () => (process.env.FLUTTERWAVE_API_BASE ?? "https://api.flutterwave.com/v3").replace(/\/$/, "");
 const CURRENCIES = ["NGN", "USD", "GBP", "EUR", "GHS", "KES", "ZAR", "UGX", "TZS", "RWF", "XOF", "XAF"];
 const secret = () => process.env.FLUTTERWAVE_SECRET_KEY ?? "";
 /** The "secret hash" you set in the Flutterwave dashboard (Settings → Webhooks). */
@@ -15,7 +16,7 @@ export const flutterwave: PaymentGateway = {
   isConfigured: () => secret().length > 0 && hash().length > 0,
 
   async initialize(i) {
-    const { status, json } = await gatewayRequest(`${BASE}/payments`, {
+    const { status, json } = await gatewayRequest(`${base()}/payments`, {
       method: "POST", secret: secret(),
       body: {
         tx_ref: i.reference, amount: i.amountMinor / 100, currency: i.currency, redirect_url: i.callbackUrl,
@@ -31,7 +32,7 @@ export const flutterwave: PaymentGateway = {
   },
 
   async verify(reference) {
-    const { status, json } = await gatewayRequest(`${BASE}/transactions/verify_by_reference?tx_ref=${encodeURIComponent(reference)}`, { method: "GET", secret: secret() });
+    const { status, json } = await gatewayRequest(`${base()}/transactions/verify_by_reference?tx_ref=${encodeURIComponent(reference)}`, { method: "GET", secret: secret() });
     if (status === 404 || (json.status === "error" && status < 500)) return { status: "pending", reference, amountMinor: null, currency: null, raw: { notFound: true } };
     if (status >= 400) throw new GatewayError("Flutterwave could not verify the transaction.", status);
     const data = asRecord(json.data);

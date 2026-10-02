@@ -15,6 +15,9 @@ import { CLIENT_UPLOAD_STATUSES } from "@/lib/applications/status";
 import { requireClientPage } from "@/lib/auth/session";
 import { AppError } from "@/lib/errors";
 import { getApplicationView } from "@/lib/services/applications";
+import { listPaymentsForClientApplication } from "@/lib/services/payments";
+import { formatMinor } from "@/lib/payments/amounts";
+import { PAYMENT_STATUS_LABEL, PAYMENT_STATUS_TONE } from "@/lib/applications/labels";
 
 export const metadata: Metadata = { title: "Application" };
 export const dynamic = "force-dynamic";
@@ -31,8 +34,10 @@ export default async function ApplicationPage({ params, searchParams }: { params
   }
   const { app, config, answers, steps, slots, currentDocs, progress, history } = view;
   const submitted = (await searchParams).submitted === "1";
+  const payments = await listPaymentsForClientApplication(actor, app.id);
+  const due = app.status !== "DRAFT" ? payments.find((p) => p.status === "PENDING" || p.status === "FAILED") : undefined;
   const flagged = currentDocs.filter((d) => d.status === "REJECTED" || d.status === "REPLACEMENT_REQUIRED");
-  const action = nextAction({ status: app.status, progressPercent: app.progressPercent, documentsToReplace: flagged.map((d) => d.name) });
+  const action = nextAction({ status: app.status, progressPercent: app.progressPercent, documentsToReplace: flagged.map((d) => d.name), paymentDue: due ? `Complete your payment of ${formatMinor(due.amountMinor, due.currency)}${due.kind === "ADDITIONAL" ? ` (${due.description})` : ""}` : null });
   const canUploadAny = !isTerminal(app.status) && (CLIENT_UPLOAD_STATUSES.includes(app.status) || flagged.length > 0);
 
   return (
@@ -53,7 +58,7 @@ export default async function ApplicationPage({ params, searchParams }: { params
             <AlertCircle className="mt-0.5 size-5 shrink-0 text-gold" aria-hidden />
             <div><p className="text-xs font-semibold uppercase tracking-wider text-ink-3">Next action</p><p className="font-semibold">{action.label}</p></div>
           </div>
-          {action.target !== "detail" && <Button asChild><Link href={actionHref(app.id, action.target)}>{app.status === "DRAFT" ? "Continue application" : "Take action"}</Link></Button>}
+          {action.target !== "detail" && <Button asChild><Link href={actionHref(app.id, action.target, due?.id)}>{app.status === "DRAFT" ? "Continue application" : action.target === "payment" ? "Pay now" : "Take action"}</Link></Button>}
         </div>
       )}
 
@@ -73,6 +78,19 @@ export default async function ApplicationPage({ params, searchParams }: { params
         </Card>
 
         <div className="space-y-6">
+          {payments.length > 0 && (
+            <Card className="p-6 sm:p-8">
+              <h2 className="mb-4 text-2xl font-semibold">Payments</h2>
+              <ul className="divide-y divide-line rounded-2xl border border-line">
+                {payments.map((p) => (
+                  <li key={p.id} className="flex flex-wrap items-center justify-between gap-3 p-4">
+                    <div><p className="font-medium">{p.description}</p><p className="text-xs text-ink-3 font-mono">{p.reference}</p></div>
+                    <div className="flex items-center gap-3"><span className="font-semibold">{formatMinor(p.amountMinor, p.currency)}</span><Badge tone={PAYMENT_STATUS_TONE[p.status]}>{PAYMENT_STATUS_LABEL[p.status]}</Badge><Button asChild size="sm" variant="outline"><Link href={`/client/payments/${p.id}`}>{p.status === "PENDING" || p.status === "FAILED" ? "Pay now" : "View"}</Link></Button></div>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
           {slots.length > 0 && (
             <Card id="documents" className="scroll-mt-24 p-6 sm:p-8">
               <h2 className="mb-1 text-2xl font-semibold">Documents</h2>

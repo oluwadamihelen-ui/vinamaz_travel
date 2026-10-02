@@ -26,7 +26,9 @@ Production branch: set to the branch you want live (this work is on `claude/vina
 | `BLOB_READ_WRITE_TOKEN` | the private Blob store token (added by Vercel when you connect the store) |
 | `RESEND_API_KEY` | Resend API key - **required for password reset emails** |
 | `EMAIL_FROM` | e.g. `Vinamaz Travels <no-reply@vinamaz.com>` - the domain must be verified in Resend |
-| `PAYSTACK_SECRET_KEY` | Phase 4 - not used yet |
+| `PAYSTACK_SECRET_KEY` | Paystack secret key (test key `sk_test_...` first, then live) |
+| `FLUTTERWAVE_SECRET_KEY`, `FLUTTERWAVE_SECRET_HASH` | Flutterwave secret key, and the webhook "secret hash" you choose in their dashboard |
+| `KORAPAY_SECRET_KEY` | Korapay secret key |
 
 `AUTH_TRUST_HOST` is not needed on Vercel. Do **not** set `ALLOW_LOCAL_PRIVATE_STORAGE` in production.
 
@@ -60,3 +62,28 @@ Password reset sends an email through Resend. Without `RESEND_API_KEY` in produc
 2. Set `RESEND_API_KEY` and `EMAIL_FROM` in Vercel (Production) and redeploy.
    Until the domain is verified, Resend only delivers to your own account email using `onboarding@resend.dev`.
 Reset links work once and expire after 60 minutes. Resetting a password also signs out all older sessions.
+
+## Payments
+Four methods are supported: **Paystack, Flutterwave, Korapay** (hosted checkout) and **manual bank transfer**.
+
+1. Set the keys above in Vercel (Production) and redeploy. A gateway is offered to clients only when its keys are set
+   **and** it is switched on in *Admin -> Settings*. Currencies offered per gateway: Paystack NGN/GHS/ZAR/KES/USD,
+   Flutterwave NGN/USD/GBP/EUR/GHS/KES/ZAR/UGX/TZS/RWF/XOF/XAF, Korapay NGN/KES/GHS (your gateway account must also have
+   the currency enabled).
+2. In each gateway dashboard set the **webhook URL** (shown in *Admin -> Settings*):
+   - Paystack: `https://<your-domain>/api/webhooks/paystack` (Settings -> API Keys & Webhooks)
+   - Flutterwave: `https://<your-domain>/api/webhooks/flutterwave` with the same secret hash as `FLUTTERWAVE_SECRET_HASH`
+   - Korapay: `https://<your-domain>/api/webhooks/korapay` (also sent per transaction)
+3. *Admin -> Settings -> Bank transfer*: add Vinamaz's bank account (bank, account name, number, currency). Clients see it
+   with the exact amount and their payment reference (to use as the transfer narration), upload their receipt, and staff
+   with `payments.manage` confirm it in *Admin -> Payments*.
+4. Test with each gateway's **test keys** first: pay with a test card, confirm the application moves to "Payment confirmed".
+
+How payments are protected: the server computes every amount; a payment only becomes "Paid" after the gateway's verify API
+confirms the amount, currency and reference (webhook signatures are checked first); webhooks and the return page share one
+idempotent confirmation path; a mismatch is parked for staff review. Refunds are *recorded* in the app (payments.refund
+permission, super admin by default) - send the money from the gateway dashboard or your bank.
+
+> The gateway request/response shapes and webhook signature schemes were implemented from each provider's public API
+> documentation and unit-tested against simulated responses. They have not been exercised against the live providers from
+> this codebase, so run each gateway's sandbox end-to-end once before taking real money.

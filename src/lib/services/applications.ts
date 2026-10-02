@@ -11,7 +11,7 @@ import {
 import { CLIENT_EDITABLE_STATUSES, canTransition } from "@/lib/applications/status";
 import { isTerminal, nextAction } from "@/lib/applications/next-action";
 import { applicantDraftSchema, applicantSchema } from "@/lib/validation/application";
-import { computePackageCharge } from "@/lib/payments/amounts";
+import { computePackageCharge, formatMinor } from "@/lib/payments/amounts";
 import { createPaymentRow } from "@/lib/payments/create";
 import { recordAudit } from "./audit";
 import { nextApplicationNumber } from "./application-number";
@@ -340,7 +340,7 @@ const ACTIVE_EXCLUDED = ["DRAFT", "APPROVED", "REFUSED", "COMPLETED", "CANCELLED
 /** Everything the dashboard needs in three queries, all scoped to the acting client. */
 export async function getClientDashboard(actor: Actor) {
   requireClient(actor);
-  const [apps, flagged] = await Promise.all([
+  const [apps, flagged, dues] = await Promise.all([
     db.visaApplication.findMany({
       where: { clientId: actor.id }, orderBy: { updatedAt: "desc" }, take: 50,
       select: { id: true, applicationNumber: true, packageName: true, packageCountry: true, status: true, progressPercent: true, updatedAt: true, submittedAt: true },
@@ -349,13 +349,22 @@ export async function getClientDashboard(actor: Actor) {
       where: { isCurrent: true, status: { in: ["REJECTED", "REPLACEMENT_REQUIRED"] }, application: { clientId: actor.id } },
       select: { id: true, name: true, status: true, rejectionReason: true, applicationId: true },
     }),
+    // Payments the client still has to make (unpaid, or bounced back by staff).
+    db.payment.findMany({
+      where: { clientId: actor.id, status: { in: ["PENDING", "FAILED"] } }, orderBy: { createdAt: "asc" },
+      select: { id: true, applicationId: true, kind: true, description: true, amountMinor: true, currency: true },
+    }),
   ]);
+  const dueByApp = new Map<string, (typeof dues)[number]>();
+  for (const d of dues) if (!dueByApp.has(d.applicationId)) dueByApp.set(d.applicationId, d);
   const flaggedByApp = new Map<string, typeof flagged>();
   for (const d of flagged) flaggedByApp.set(d.applicationId, [...(flaggedByApp.get(d.applicationId) ?? []), d]);
 
   const items = apps.map((a) => {
     const docs = flaggedByApp.get(a.id) ?? [];
-    return { ...a, documentsToReplace: docs, action: nextAction({ status: a.status, progressPercent: a.progressPercent, documentsToReplace: docs.map((d) => d.name) }) };
+    const due = dueByApp.get(a.id);
+    const paymentDue = due && a.status !== "DRAFT" ? `Complete your payment of ${formatMinor(due.amountMinor, due.currency)}${due.kind === "ADDITIONAL" ? ` (${due.description})` : ""}` : null;
+    return { ...a, documentsToReplace: docs, paymentId: due?.id ?? null, action: nextAction({ status: a.status, progressPercent: a.progressPercent, documentsToReplace: docs.map((d) => d.name), paymentDue }) };
   });
   const current = items.find((i) => i.action?.urgent) ?? items.find((i) => !isTerminal(i.status)) ?? null;
   return {
@@ -364,7 +373,7 @@ export async function getClientDashboard(actor: Actor) {
     counts: {
       active: items.filter((i) => !(ACTIVE_EXCLUDED as readonly string[]).includes(i.status)).length,
       documentsRequired: flagged.length + items.filter((i) => i.status === "DOCUMENTS_REQUIRED" && !(flaggedByApp.get(i.id)?.length)).length,
-      pendingPayments: items.filter((i) => i.status === "PAYMENT_PENDING").length,
+      pendingPayments: dues.length,
       completed: items.filter((i) => i.status === "COMPLETED" || i.status === "APPROVED" || i.status === "REFUSED").length,
     },
   };

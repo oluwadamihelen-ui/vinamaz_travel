@@ -91,6 +91,7 @@ export async function listAdminApplications(actor: Actor, f: ApplicationFilters 
         createdAt: true, updatedAt: true, submittedAt: true,
         client: { select: { id: true, name: true, email: true, phone: true } },
         assignedTo: { select: { id: true, name: true } },
+        payments: { where: { kind: "APPLICATION" }, select: { status: true }, take: 1 },
       },
     }),
     db.visaApplication.count({ where }),

@@ -105,7 +105,7 @@ export function getPrivateStorage(): PrivateStorage {
   if (process.env.NODE_ENV === "production" && !process.env.ALLOW_LOCAL_PRIVATE_STORAGE) {
     throw new Error("Private storage is not configured (set BLOB_READ_WRITE_TOKEN or PRIVATE_BLOB_READ_WRITE_TOKEN).");
   }
-  return (instance = new LocalPrivateStorage(path.resolve(process.env.PRIVATE_STORAGE_DIR ?? ".data/private-documents")));
+  return (instance = new LocalPrivateStorage(path.resolve(/*turbopackIgnore: true*/ process.env.PRIVATE_STORAGE_DIR ?? ".data/private-documents")));
 }
 
 /** Test seam. */

@@ -1,4 +1,4 @@
-import type { ApplicationStatus, DocumentStatus } from "@/generated/prisma/enums";
+import type { ApplicationStatus, DocumentStatus, PaymentMethod, PaymentStatus } from "@/generated/prisma/enums";
 
 export const STATUS_LABEL: Record<ApplicationStatus, string> = {
   DRAFT: "Draft",
@@ -37,3 +37,21 @@ export const DOC_STATUS_TONE: Record<DocumentStatus, "neutral" | "gold" | "info"
 };
 
 export const APPLICATION_STATUSES = Object.keys(STATUS_LABEL) as ApplicationStatus[];
+
+export const PAYMENT_STATUS_LABEL: Record<PaymentStatus, string> = {
+  PENDING: "Awaiting payment",
+  PROCESSING: "Awaiting confirmation",
+  SUCCESS: "Paid",
+  FAILED: "Failed",
+  CANCELLED: "Cancelled",
+  REFUNDED: "Refunded",
+  PARTIALLY_REFUNDED: "Partially refunded",
+};
+
+export const PAYMENT_STATUS_TONE: Record<PaymentStatus, "neutral" | "gold" | "info" | "ok" | "danger"> = {
+  PENDING: "gold", PROCESSING: "info", SUCCESS: "ok", FAILED: "danger", CANCELLED: "neutral", REFUNDED: "neutral", PARTIALLY_REFUNDED: "neutral",
+};
+
+export const METHOD_LABEL: Record<PaymentMethod, string> = {
+  PAYSTACK: "Paystack", FLUTTERWAVE: "Flutterwave", KORAPAY: "Korapay", BANK_TRANSFER: "Bank transfer",
+};

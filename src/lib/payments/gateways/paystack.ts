@@ -2,7 +2,8 @@ import { asRecord, gatewayRequest } from "../http";
 import { hmacHex, safeEqual } from "../signatures";
 import { GatewayError, type PaymentGateway, type WebhookCheck } from "../types";
 
-const BASE = "https://api.paystack.co";
+// Overridable for sandbox/mock testing; defaults to the live API.
+const base = () => (process.env.PAYSTACK_API_BASE ?? "https://api.paystack.co").replace(/\/$/, "");
 // Currencies Paystack accounts can commonly charge; each merchant account must still have them enabled.
 const CURRENCIES = ["NGN", "GHS", "ZAR", "KES", "USD"];
 const secret = () => process.env.PAYSTACK_SECRET_KEY ?? "";
@@ -14,7 +15,7 @@ export const paystack: PaymentGateway = {
   isConfigured: () => secret().length > 0,
 
   async initialize(i) {
-    const { status, json } = await gatewayRequest(`${BASE}/transaction/initialize`, {
+    const { status, json } = await gatewayRequest(`${base()}/transaction/initialize`, {
       method: "POST", secret: secret(),
       body: { email: i.customer.email, amount: i.amountMinor, currency: i.currency, reference: i.reference, callback_url: i.callbackUrl, metadata: { description: i.description, customer_name: i.customer.name } },
     });
@@ -26,7 +27,7 @@ export const paystack: PaymentGateway = {
   },
 
   async verify(reference) {
-    const { status, json } = await gatewayRequest(`${BASE}/transaction/verify/${encodeURIComponent(reference)}`, { method: "GET", secret: secret() });
+    const { status, json } = await gatewayRequest(`${base()}/transaction/verify/${encodeURIComponent(reference)}`, { method: "GET", secret: secret() });
     if (status === 404) return { status: "pending", reference, amountMinor: null, currency: null, raw: { notFound: true } }; // customer hasn't started paying
     const data = asRecord(json.data);
     if (status >= 400 || json.status !== true) throw new GatewayError("Paystack could not verify the transaction.", status);

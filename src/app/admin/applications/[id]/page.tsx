@@ -9,6 +9,11 @@ import { DOC_STATUS_LABEL, DOC_STATUS_TONE, STATUS_LABEL, STATUS_TONE } from "@/
 import { requireStaffPage } from "@/lib/auth/session";
 import { AppError } from "@/lib/errors";
 import { getAdminApplicationView } from "@/lib/services/admin-applications";
+import { listApplicationPayments } from "@/lib/services/payments";
+import { RequestPaymentForm } from "@/components/admin/payment-actions";
+import { can } from "@/lib/auth/permissions";
+import { formatMinor } from "@/lib/payments/amounts";
+import { METHOD_LABEL, PAYMENT_STATUS_LABEL, PAYMENT_STATUS_TONE } from "@/lib/applications/labels";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Application · Admin" };
@@ -38,6 +43,9 @@ export default async function AdminApplicationPage({ params, searchParams }: { p
     throw e;
   }
   const { app, client, permissions: perm } = v;
+  const showPayments = can(actor, "payments.view");
+  const payments = showPayments ? await listApplicationPayments(actor, app.id) : [];
+  const pkgCurrency = payments[0]?.currency ?? "NGN";
   const awaitingReview = v.currentDocs.filter((d) => d.status === "UPLOADED" || d.status === "UNDER_REVIEW").length;
   const awaitingClient = v.currentDocs.filter((d) => d.status === "REJECTED" || d.status === "REPLACEMENT_REQUIRED").length;
   const missingRequired = v.slots.filter((s) => s.isRequired && !v.currentDocs.some((d) => d.requirementKey === s.key)).length;
@@ -56,7 +64,7 @@ export default async function AdminApplicationPage({ params, searchParams }: { p
           </div>
           <div className="flex flex-col items-start gap-2 sm:items-end">
             <Badge tone={STATUS_TONE[app.status]} className="px-3.5 py-1.5 text-sm">{STATUS_LABEL[app.status]}</Badge>
-            <p className="text-sm text-ink-3">Payment: <span className="font-medium text-ink">Not yet tracked</span></p>
+            <p className="text-sm text-ink-3">Payment: <span className="font-medium text-ink">{payments.find((p) => p.kind === "APPLICATION") ? PAYMENT_STATUS_LABEL[payments.find((p) => p.kind === "APPLICATION")!.status] : "None required"}</span></p>
           </div>
         </div>
       </header>
@@ -183,7 +191,28 @@ export default async function AdminApplicationPage({ params, searchParams }: { p
         )
       )}
 
-      {tab === "payments" && <Card className="p-8 text-center text-ink-3">Payments for this application will appear here once online payments are enabled.</Card>}
+      {tab === "payments" && (
+        !showPayments ? <Alert>You don&rsquo;t have permission to view payments.</Alert> : (
+          <div className="grid gap-6 lg:grid-cols-[1.3fr_1fr]">
+            <Card className="p-6">
+              <h2 className="text-xl font-semibold">Payments</h2>
+              {payments.length === 0 ? <p className="mt-3 text-sm text-ink-3">No payment is required for this application yet.</p> : (
+                <ul className="mt-4 divide-y divide-line rounded-2xl border border-line">
+                  {payments.map((p) => (
+                    <li key={p.id} className="flex flex-wrap items-center justify-between gap-3 p-4">
+                      <div><Link className="font-medium text-brand hover:underline" href={`/admin/payments/${p.id}`}>{p.description}</Link><p className="font-mono text-xs text-ink-3">{p.reference}{p.method ? ` · ${METHOD_LABEL[p.method]}` : ""}</p></div>
+                      <div className="flex items-center gap-2"><span className="font-semibold">{formatMinor(p.amountMinor, p.currency)}</span><Badge tone={PAYMENT_STATUS_TONE[p.status]}>{PAYMENT_STATUS_LABEL[p.status]}</Badge></div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Card>
+            {can(actor, "payments.manage") && app.status !== "DRAFT" && app.status !== "CANCELLED" && (
+              <Card className="p-6"><h2 className="mb-4 text-xl font-semibold">Request an additional payment</h2><RequestPaymentForm applicationId={app.id} currency={pkgCurrency} /></Card>
+            )}
+          </div>
+        )
+      )}
 
       {tab === "timeline" && (
         <Card className="p-6 sm:p-8">

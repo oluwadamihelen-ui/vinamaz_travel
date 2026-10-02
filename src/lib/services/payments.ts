@@ -81,6 +81,15 @@ export async function listClientPayments(actor: Actor, opts: { page?: number; pa
   return { items, total, page, pages: Math.max(1, Math.ceil(total / pageSize)) };
 }
 
+/** All payments for one of the client's own applications (ownership enforced by clientId). */
+export async function listPaymentsForClientApplication(actor: Actor, applicationId: string) {
+  requireClient(actor);
+  return db.payment.findMany({
+    where: { applicationId, clientId: actor.id }, orderBy: { createdAt: "asc" },
+    select: { id: true, reference: true, kind: true, description: true, amountMinor: true, currency: true, method: true, status: true, paidAt: true },
+  });
+}
+
 /** The payment (if any) of the client's own application: used to point "pay now" links. */
 export async function getApplicationPaymentId(actor: Actor, applicationId: string): Promise<string | null> {
   requireClient(actor);

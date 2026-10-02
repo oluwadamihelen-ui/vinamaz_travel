@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { FileText, LogOut, Package, Users } from "lucide-react";
+import { CreditCard, FileText, LogOut, Package, Settings, Users } from "lucide-react";
 import { Logo } from "@/components/site/logo";
 import { Button } from "@/components/ui/button";
 import { logoutAction } from "@/lib/actions/auth";
@@ -10,8 +10,10 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const actor = await requireStaffPage();
   const links = [
     can(actor, "applications.view") && { href: "/admin/applications", label: "Applications", icon: FileText },
+    can(actor, "payments.view") && { href: "/admin/payments", label: "Payments", icon: CreditCard },
     can(actor, "packages.view") && { href: "/admin/packages", label: "Packages", icon: Package },
     can(actor, "settings.manage") && { href: "/admin/staff", label: "Staff", icon: Users },
+    can(actor, "settings.manage") && { href: "/admin/settings", label: "Settings", icon: Settings },
   ].filter(Boolean) as { href: string; label: string; icon: typeof Package }[];
   return (
     <div className="min-h-screen bg-sand/50">

@@ -2,7 +2,8 @@ import { asRecord, gatewayRequest } from "../http";
 import { hmacHex, safeEqual } from "../signatures";
 import { GatewayError, type PaymentGateway, type WebhookCheck } from "../types";
 
-const BASE = "https://api.korapay.com/merchant/api/v1";
+// Overridable for sandbox/mock testing; defaults to the live API.
+const base = () => (process.env.KORAPAY_API_BASE ?? "https://api.korapay.com/merchant/api/v1").replace(/\/$/, "");
 const CURRENCIES = ["NGN", "KES", "GHS"];
 const secret = () => process.env.KORAPAY_SECRET_KEY ?? "";
 
@@ -13,7 +14,7 @@ export const korapay: PaymentGateway = {
   isConfigured: () => secret().length > 0,
 
   async initialize(i) {
-    const { status, json } = await gatewayRequest(`${BASE}/charges/initialize`, {
+    const { status, json } = await gatewayRequest(`${base()}/charges/initialize`, {
       method: "POST", secret: secret(),
       body: {
         reference: i.reference, amount: i.amountMinor / 100, currency: i.currency, redirect_url: i.callbackUrl, notification_url: i.webhookUrl,
@@ -28,7 +29,7 @@ export const korapay: PaymentGateway = {
   },
 
   async verify(reference) {
-    const { status, json } = await gatewayRequest(`${BASE}/charges/${encodeURIComponent(reference)}`, { method: "GET", secret: secret() });
+    const { status, json } = await gatewayRequest(`${base()}/charges/${encodeURIComponent(reference)}`, { method: "GET", secret: secret() });
     if (status === 404) return { status: "pending", reference, amountMinor: null, currency: null, raw: { notFound: true } };
     if (status >= 400) throw new GatewayError("Korapay could not verify the transaction.", status);
     const data = asRecord(json.data);
