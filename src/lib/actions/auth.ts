@@ -7,6 +7,7 @@ import { AppError } from "@/lib/errors";
 import { rateLimit } from "@/lib/rate-limit";
 import { safeNext } from "@/lib/safe-redirect";
 import { registerClient } from "@/lib/services/users";
+import { requestPasswordReset, resetPassword } from "@/lib/services/password-reset";
 import { loginSchema } from "@/lib/validation/auth";
 
 export interface FormState {
@@ -58,4 +59,37 @@ export async function loginAction(_prev: FormState, formData: FormData): Promise
 
 export async function logoutAction() {
   await signOut({ redirectTo: "/" });
+}
+
+async function clientIp() {
+  const h = await headers();
+  return h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+}
+
+/** Always reports success, whether or not the email has an account (no user enumeration). */
+export async function forgotPasswordAction(_prev: FormState & { sent?: boolean }, formData: FormData): Promise<FormState & { sent?: boolean }> {
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  if (!email) return { error: "Enter your email address." };
+  const ip = await clientIp();
+  if (!rateLimit(`forgot:ip:${ip}`, 10, 60 * 60 * 1000).ok || !rateLimit(`forgot:email:${email}`, 3, 60 * 60 * 1000).ok) {
+    return { error: "Too many requests. Please try again later." };
+  }
+  try {
+    await requestPasswordReset(email);
+  } catch (e) {
+    console.error("[forgot-password]", e); // still report success: never reveal account state
+  }
+  return { sent: true };
+}
+
+export async function resetPasswordAction(token: string, _prev: FormState, formData: FormData): Promise<FormState> {
+  if (!rateLimit(`reset:ip:${await clientIp()}`, 20, 60 * 60 * 1000).ok) return { error: "Too many attempts. Please try again later." };
+  try {
+    await resetPassword(token, String(formData.get("password") ?? ""), String(formData.get("confirmPassword") ?? ""));
+  } catch (e) {
+    if (e instanceof AppError) return { error: e.message, fieldErrors: e.fieldErrors };
+    console.error("[reset-password]", e);
+    return { error: "We couldn't reset your password. Please try again." };
+  }
+  return { redirectTo: "/login?reset=1" };
 }

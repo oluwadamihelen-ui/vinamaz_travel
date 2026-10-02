@@ -78,7 +78,7 @@ export default async function PackagePage({ params }: Props) {
 
           {pkg.inclusions.length > 0 && (
             <Section title="What's included">
-              <ul className="grid gap-3 sm:grid-cols-2">{pkg.inclusions.map((i) => <li key={i} className="flex gap-3 rounded-2xl bg-white p-4 text-[15px] shadow-card"><Check className="mt-0.5 size-5 shrink-0 text-teal" />{i}</li>)}</ul>
+              <ul className="grid gap-3 sm:grid-cols-2">{pkg.inclusions.map((i) => <li key={i} className="flex gap-3 rounded-2xl bg-white p-4 text-[15px] shadow-card"><Check className="mt-0.5 size-5 shrink-0 text-brand" />{i}</li>)}</ul>
               {pkg.exclusions.length > 0 && (
                 <>
                   <h3 className="mt-8 text-lg font-semibold">Not included</h3>
@@ -160,7 +160,7 @@ export default async function PackagePage({ params }: Props) {
                 {serviceFee && <div className="flex justify-between gap-4"><dt className="text-ink-3">Service fee</dt><dd className="font-semibold">{serviceFee}</dd></div>}
               </dl>
             )}
-            {pkg.processingEstimate && <p className="mt-4 flex items-center gap-2 text-sm text-ink-3"><Clock className="size-4 text-teal" /> {pkg.processingEstimate}</p>}
+            {pkg.processingEstimate && <p className="mt-4 flex items-center gap-2 text-sm text-ink-3"><Clock className="size-4 text-brand" /> {pkg.processingEstimate}</p>}
             <Button asChild className="mt-6 w-full" size="lg"><Link href={startHref}>Start application</Link></Button>
             <p className="mt-3 text-center text-xs text-ink-3">A free Vinamaz account is required to apply.</p>
           </div>

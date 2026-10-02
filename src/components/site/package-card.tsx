@@ -5,9 +5,19 @@ import { Button } from "@/components/ui/button";
 import { formatMoney } from "@/lib/utils";
 import type { PackageCard as PackageCardData } from "@/lib/services/packages";
 
+/**
+ * Shows the WHOLE artwork (object-contain) so posters of any shape are never cropped or
+ * off-centre; a blurred copy of the same image fills the leftover space.
+ */
 export function PackageImage({ url, alt, name, country, priority }: { url: string | null; alt?: string | null; name: string; country: string; priority?: boolean }) {
   if (url) {
-    return <Image src={url} alt={alt || `${name} — ${country}`} fill sizes="(min-width:1024px) 33vw, (min-width:640px) 50vw, 100vw" priority={priority} className="object-cover transition-transform duration-700 group-hover:scale-105" />;
+    const sizes = "(min-width:1024px) 33vw, (min-width:640px) 50vw, 100vw";
+    return (
+      <div className="relative h-full w-full overflow-hidden bg-sand">
+        <Image src={url} alt="" aria-hidden fill sizes={sizes} className="scale-125 object-cover opacity-70 blur-2xl" />
+        <Image src={url} alt={alt || `${name} — ${country}`} fill sizes={sizes} priority={priority} className="object-contain object-center transition-transform duration-700 group-hover:scale-[1.03]" />
+      </div>
+    );
   }
   // Neutral placeholder until an administrator uploads the real artwork.
   return (
@@ -34,13 +44,13 @@ export function PackageCard({ pkg }: { pkg: PackageCardData }) {
           <dl className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-sm">
             {price && <div><dt className="text-xs text-ink-3">Starting from</dt><dd className="font-semibold">{price}</dd></div>}
             {pkg.processingEstimate && (
-              <div><dt className="text-xs text-ink-3">Processing estimate</dt><dd className="flex items-center gap-1.5 font-semibold"><Clock className="size-3.5 text-teal" />{pkg.processingEstimate}</dd></div>
+              <div><dt className="text-xs text-ink-3">Processing estimate</dt><dd className="flex items-center gap-1.5 font-semibold"><Clock className="size-3.5 text-brand" />{pkg.processingEstimate}</dd></div>
             )}
           </dl>
         )}
         {highlights.length > 0 && (
           <ul className="mt-4 space-y-1.5 text-sm text-ink-3">
-            {highlights.map((h) => <li key={h} className="flex gap-2"><Check className="mt-0.5 size-4 shrink-0 text-teal" />{h}</li>)}
+            {highlights.map((h) => <li key={h} className="flex gap-2"><Check className="mt-0.5 size-4 shrink-0 text-brand" />{h}</li>)}
           </ul>
         )}
         <div className="mt-auto flex flex-wrap gap-3 pt-6">

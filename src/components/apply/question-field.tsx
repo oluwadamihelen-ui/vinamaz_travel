@@ -49,7 +49,7 @@ export function QuestionField({
           {q.helpText && <p className="mb-2 text-xs text-ink-3">{q.helpText}</p>}
           <div className="space-y-2">
             {q.options.map((o) => (
-              <label key={o.value} className="flex min-h-12 cursor-pointer items-center gap-3 rounded-xl border border-line bg-white px-4 text-[15px] has-[:checked]:border-teal has-[:checked]:bg-teal-soft/50">
+              <label key={o.value} className="flex min-h-12 cursor-pointer items-center gap-3 rounded-xl border border-line bg-white px-4 text-[15px] has-[:checked]:border-brand has-[:checked]:bg-brand-soft/50">
                 <input type="radio" name={id} value={o.value} checked={value === o.value} onChange={() => onChange(o.value)} className="size-5 accent-ink" />
                 {o.label}
               </label>
@@ -66,7 +66,7 @@ export function QuestionField({
           {q.helpText && <p className="mb-2 text-xs text-ink-3">{q.helpText}</p>}
           <div className="space-y-2">
             {q.options.map((o) => (
-              <label key={o.value} className="flex min-h-12 cursor-pointer items-center gap-3 rounded-xl border border-line bg-white px-4 text-[15px] has-[:checked]:border-teal has-[:checked]:bg-teal-soft/50">
+              <label key={o.value} className="flex min-h-12 cursor-pointer items-center gap-3 rounded-xl border border-line bg-white px-4 text-[15px] has-[:checked]:border-brand has-[:checked]:bg-brand-soft/50">
                 <input type="checkbox" name={id} value={o.value} checked={selected.includes(o.value)}
                   onChange={(e) => onChange(e.target.checked ? [...selected, o.value] : selected.filter((v) => v !== o.value))} className="size-5 accent-ink" />
                 {o.label}

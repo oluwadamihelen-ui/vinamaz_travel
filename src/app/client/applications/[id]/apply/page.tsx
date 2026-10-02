@@ -50,7 +50,7 @@ export default async function ApplyWizardPage({ params, searchParams }: { params
           {steps.map((s, i) => (
             <li key={s.key}>
               <Link href={`${base}?step=${s.key}`} aria-current={i === idx ? "step" : undefined}
-                className={cn("flex min-h-11 items-center gap-2 rounded-full border px-4 font-medium", i === idx ? "border-ink bg-ink text-white" : i < idx ? "border-teal/30 bg-teal-soft text-teal" : "border-line bg-white text-ink-3")}>
+                className={cn("flex min-h-11 items-center gap-2 rounded-full border px-4 font-medium", i === idx ? "border-ink bg-ink text-white" : i < idx ? "border-brand/30 bg-brand-soft text-brand" : "border-line bg-white text-ink-3")}>
                 {i < idx ? <Check className="size-4" /> : <span className="text-xs">{i + 1}</span>}{s.title}
               </Link>
             </li>
@@ -66,7 +66,7 @@ export default async function ApplyWizardPage({ params, searchParams }: { params
           <div className="space-y-8">
             <ApplicationSummary applicant={applicant} steps={steps} questions={config.questions} answers={answers} slots={slots} docs={currentDocs} />
             <SubmitForm applicationId={app.id} stepLinks={steps.filter((s) => s.kind !== "review").map((s) => ({ href: `${base}?step=${s.key}`, title: s.title }))} />
-            <Link href={`${base}?step=${steps[idx - 1]!.key}`} className="inline-block text-sm font-medium text-teal hover:underline">← Back</Link>
+            <Link href={`${base}?step=${steps[idx - 1]!.key}`} className="inline-block text-sm font-medium text-brand hover:underline">← Back</Link>
           </div>
         ) : (
           <StepForm

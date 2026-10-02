@@ -7,12 +7,12 @@ const fraunces = Fraunces({ subsets: ["latin"], variable: "--font-fraunces", dis
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"),
-  title: { default: "Vinamaz — Visa assistance & travel application support", template: "%s · Vinamaz" },
+  title: { default: "Vinamaz Travels — Visa assistance & travel application support", template: "%s · Vinamaz Travels" },
   description:
     "Vinamaz helps travellers prepare and manage visa applications: choose a destination package, complete a guided application, upload documents securely and track progress.",
 };
 
-export const viewport: Viewport = { themeColor: "#0b1b33", width: "device-width", initialScale: 1 };
+export const viewport: Viewport = { themeColor: "#2b0b0e", width: "device-width", initialScale: 1 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

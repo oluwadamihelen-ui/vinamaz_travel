@@ -38,7 +38,7 @@ export default async function AdminPackagesPage({ searchParams }: { searchParams
               <div className="flex flex-wrap items-center gap-2">
                 <p className="truncate text-lg font-semibold">{p.name}</p>
                 <Badge tone={TONE[p.status]}>{p.status.charAt(0) + p.status.slice(1).toLowerCase()}</Badge>
-                {p.isFeatured && <Badge tone="teal">Featured</Badge>}
+                {p.isFeatured && <Badge tone="brand">Featured</Badge>}
               </div>
               <p className="mt-1 text-sm text-ink-3">
                 {p.country} · /packages/{p.slug} · Order {p.displayOrder} · {formatMoney(p.price, p.currency) ?? "No price set"}

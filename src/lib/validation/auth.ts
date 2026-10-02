@@ -28,11 +28,13 @@ const optionalText = (max: number) =>
     .optional()
     .transform((v) => (v ? v : undefined));
 
-export const registerSchema = z.object({
+export const registerSchema = z
+  .object({
   name: z.string().trim().min(2, "Enter your full name").max(120),
   email: emailSchema,
   phone: phoneSchema,
   password: passwordSchema,
+  confirmPassword: z.string().min(1, "Confirm your password"),
   countryOfResidence: z.string().trim().min(2, "Select your country of residence").max(80),
   whatsapp: z
     .string()
@@ -53,7 +55,8 @@ export const registerSchema = z.object({
         .refine((v) => !Number.isNaN(Date.parse(v)) && new Date(v) < new Date(), "Enter a valid date of birth")
         .optional(),
     ),
-});
+  })
+  .refine((v) => v.password === v.confirmPassword, { message: "Passwords do not match", path: ["confirmPassword"] });
 
 export type RegisterInput = z.infer<typeof registerSchema>;
 

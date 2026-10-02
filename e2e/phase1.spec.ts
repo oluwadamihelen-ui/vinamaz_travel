@@ -29,7 +29,8 @@ test("client can register, sees only the client portal, and can sign out", async
   await page.getByLabel("Full name").fill("Ada Tester");
   await page.getByLabel("Email address").fill(`${id}@example.com`);
   await page.getByLabel("Phone number").fill("+2348030000000");
-  await page.getByLabel("Password").fill("a-long-password-123");
+  await page.getByLabel("Password", { exact: true }).fill("a-long-password-123");
+  await page.getByLabel("Confirm password").fill("a-long-password-123");
   await page.getByRole("button", { name: "Create account" }).click();
   await expect(page).toHaveURL(/\/client\/dashboard/);
   await expect(page.getByRole("heading", { name: "Hello, Ada" })).toBeVisible();
@@ -48,7 +49,8 @@ test("registration rejects a duplicate email", async ({ browser, baseURL }) => {
     await page.getByLabel("Full name").fill("Dup Tester");
     await page.getByLabel("Email address").fill(email);
     await page.getByLabel("Phone number").fill("+2348030000000");
-    await page.getByLabel("Password").fill("a-long-password-123");
+    await page.getByLabel("Password", { exact: true }).fill("a-long-password-123");
+  await page.getByLabel("Confirm password").fill("a-long-password-123");
     await page.getByRole("button", { name: "Create account" }).click();
   };
   const headers = { "x-forwarded-for": `10.${Math.floor(Math.random() * 250)}.1.1` };
@@ -67,7 +69,7 @@ test("registration rejects a duplicate email", async ({ browser, baseURL }) => {
 test("admin creates an active package, it appears publicly, then is deactivated", async ({ page }) => {
   await page.goto("/login");
   await page.getByLabel("Email address").fill(ADMIN.email);
-  await page.getByLabel("Password").fill(ADMIN.password);
+  await page.getByLabel("Password", { exact: true }).fill(ADMIN.password);
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page).toHaveURL(/\/admin\/packages/);
 
@@ -100,4 +102,24 @@ test("admin creates an active package, it appears publicly, then is deactivated"
   await page.waitForTimeout(800);
   await page.goto("/packages");
   await expect(page.getByRole("heading", { name })).toHaveCount(0);
+});
+
+test("show/hide password toggles and confirm password is enforced", async ({ page }) => {
+  await page.goto("/register");
+  const pw = page.getByLabel("Password", { exact: true });
+  await pw.fill("secret-pass-123");
+  await expect(pw).toHaveAttribute("type", "password");
+  await page.getByRole("button", { name: "Show password" }).first().click();
+  await expect(pw).toHaveAttribute("type", "text");
+  await page.getByRole("button", { name: "Hide password" }).first().click();
+  await expect(pw).toHaveAttribute("type", "password");
+
+  await page.getByLabel("Confirm password").fill("different-123");
+  await expect(page.getByText("Passwords do not match")).toBeVisible();
+  await page.getByLabel("Full name").fill("Mismatch Tester");
+  await page.getByLabel("Email address").fill(`mm${Date.now()}@example.com`);
+  await page.getByLabel("Phone number").fill("+2348030000000");
+  await page.getByRole("button", { name: "Create account" }).click();
+  await expect(page.getByRole("alert").first()).toBeVisible();
+  await expect(page.getByLabel("Full name")).toHaveValue("Mismatch Tester"); // typed data survives the error
 });

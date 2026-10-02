@@ -10,7 +10,8 @@ async function newClient(browser: Browser, baseURL: string | undefined, name: st
   await page.getByLabel("Full name").fill(name);
   await page.getByLabel("Email address").fill(`app${Date.now()}${Math.floor(Math.random() * 10000)}@example.com`);
   await page.getByLabel("Phone number").fill("+2348030000000");
-  await page.getByLabel("Password").fill("a-long-password-123");
+  await page.getByLabel("Password", { exact: true }).fill("a-long-password-123");
+  await page.getByLabel("Confirm password").fill("a-long-password-123");
   await page.getByRole("button", { name: "Create account" }).click();
   await expect(page.getByRole("button", { name: "Begin application" })).toBeVisible();
   return { context, page };

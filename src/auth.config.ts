@@ -18,6 +18,7 @@ export const authConfig = {
       // Role in the session is for UI hints / routing only. Server-side authorization
       // always re-loads the user from the database (see getActor()).
       session.user.role = token.role as string | undefined;
+      session.issuedAt = typeof token.iat === "number" ? token.iat : undefined; // lets a password reset revoke older sessions
       return session;
     },
   },

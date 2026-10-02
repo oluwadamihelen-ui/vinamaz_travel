@@ -7,7 +7,7 @@ import { formatMoney } from "@/lib/utils";
 import { formatApplicationNumber } from "@/lib/services/application-number";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
 
-const reg = { name: "Ada Obi", email: " ADA@Example.com ", phone: "+234 803 000 0000", password: "longenough123", countryOfResidence: "Nigeria" };
+const reg = { name: "Ada Obi", email: " ADA@Example.com ", phone: "+234 803 000 0000", password: "longenough123", confirmPassword: "longenough123", countryOfResidence: "Nigeria" };
 
 describe("registration validation", () => {
   it("normalises email and accepts optional fields as blank", () => {
@@ -20,6 +20,12 @@ describe("registration validation", () => {
     expect(registerSchema.safeParse({ ...reg, password: "onlyletterslong" }).success).toBe(false);
     expect(registerSchema.safeParse({ ...reg, phone: "abc" }).success).toBe(false);
     expect(registerSchema.safeParse({ ...reg, dateOfBirth: "2999-01-01" }).success).toBe(false);
+  });
+  it("requires the confirmation to match the password", () => {
+    const r = registerSchema.safeParse({ ...reg, confirmPassword: "different12345" });
+    expect(r.success).toBe(false);
+    expect(r.error?.issues[0]?.path).toEqual(["confirmPassword"]);
+    expect(registerSchema.safeParse({ ...reg, confirmPassword: "" }).success).toBe(false);
   });
   it("ignores a supplied role (not part of the schema)", () => {
     expect(registerSchema.parse({ ...reg, role: "SUPER_ADMIN" })).not.toHaveProperty("role");

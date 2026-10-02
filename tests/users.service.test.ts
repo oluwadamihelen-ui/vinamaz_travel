@@ -6,7 +6,7 @@ import { makeUser, resetDb } from "./helpers";
 beforeEach(resetDb);
 
 const reg = (over: Record<string, unknown> = {}) => ({
-  name: "Ada Obi", email: "ada@example.com", phone: "+2348030000000", password: "longenough123", countryOfResidence: "Nigeria", ...over,
+  name: "Ada Obi", email: "ada@example.com", phone: "+2348030000000", password: "longenough123", confirmPassword: "longenough123", countryOfResidence: "Nigeria", ...over,
 });
 
 describe("registerClient", () => {

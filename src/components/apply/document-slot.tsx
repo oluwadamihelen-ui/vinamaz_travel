@@ -86,7 +86,7 @@ export function DocumentSlot({ applicationId, slot, current, canUpload, error }:
         <div className="mt-4 rounded-xl bg-paper p-3">
           <div className="flex flex-wrap items-center gap-3 text-sm">
             {current.status === "REPLACEMENT_REQUIRED" || current.status === "REJECTED" ? <FileText className="size-5 text-gold" /> : <CheckCircle2 className="size-5 text-ok" />}
-            <a className="min-w-0 flex-1 basis-40 truncate font-medium text-teal hover:underline" href={`/api/documents/${current.id}`}>{current.originalFilename}</a>
+            <a className="min-w-0 flex-1 basis-40 truncate font-medium text-brand hover:underline" href={`/api/documents/${current.id}`}>{current.originalFilename}</a>
             <Badge tone={DOC_STATUS_TONE[current.status]}>{current.status === "UPLOADED" ? "Uploaded · under review soon" : DOC_STATUS_LABEL[current.status]}</Badge>
           </div>
           {current.rejectionReason && <p className="mt-2 text-sm text-gold"><strong>Reason:</strong> {current.rejectionReason}</p>}
@@ -95,7 +95,7 @@ export function DocumentSlot({ applicationId, slot, current, canUpload, error }:
 
       {progress !== null && (
         <div className="mt-4" role="progressbar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100} aria-label={`Uploading ${slot.name}`}>
-          <div className="h-2 overflow-hidden rounded-full bg-sand"><div className="h-full bg-teal transition-all" style={{ width: `${progress}%` }} /></div>
+          <div className="h-2 overflow-hidden rounded-full bg-sand"><div className="h-full bg-brand transition-all" style={{ width: `${progress}%` }} /></div>
           <p className="mt-1 text-xs text-ink-3">Uploading… {progress}%</p>
         </div>
       )}

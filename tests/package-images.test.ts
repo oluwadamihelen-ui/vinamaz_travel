@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
 import { storePackageImage } from "@/lib/storage/package-images";
 import { GET } from "@/app/api/package-images/[name]/route";
@@ -21,11 +22,12 @@ describe("package images (single private store)", () => {
   });
   it("cannot be used to read applicant documents or traverse paths", async () => {
     // A real document key exists in storage...
-    const key = "applications/ckabc123/11111111-1111-1111-1111-111111111111.pdf";
+    const id = randomUUID();
+    const key = `applications/ckabc123/${id}.pdf`;
     await getPrivateStorage().put(key, Buffer.from("%PDF-1.4 secret"), "application/pdf");
     for (const name of [
-      "11111111-1111-1111-1111-111111111111.pdf",
-      "../applications/ckabc123/11111111-1111-1111-1111-111111111111.pdf",
+      `${id}.pdf`,
+      `../applications/ckabc123/${id}.pdf`,
       "..%2Fapplications%2Fx.pdf", "not-a-uuid.png", "",
     ]) {
       expect((await get(name)).status).toBe(404);

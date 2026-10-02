@@ -1,15 +1,15 @@
+import Image from "next/image";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 
-export function Logo({ className, dark = false }: { className?: string; dark?: boolean }) {
+/**
+ * Vinamaz Travels logo. The artwork is crimson + gold, so on dark surfaces (`dark`) it sits on a
+ * white plate to keep full brand colours and contrast.
+ */
+export function Logo({ className, dark = false, href = "/" }: { className?: string; dark?: boolean; href?: string }) {
   return (
-    <Link href="/" className={cn("inline-flex items-center gap-2.5", className)} aria-label="Vinamaz home">
-      <svg width="30" height="30" viewBox="0 0 32 32" aria-hidden="true">
-        <circle cx="16" cy="16" r="15" fill={dark ? "#d4a24c" : "#0b1b33"} />
-        <path d="M8 11l8 11 8-11" fill="none" stroke={dark ? "#0b1b33" : "#d4a24c"} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
-        <circle cx="16" cy="9" r="1.7" fill={dark ? "#0b1b33" : "#d4a24c"} />
-      </svg>
-      <span className={cn("font-display text-[22px] font-semibold tracking-[0.12em]", dark ? "text-white" : "text-ink")}>VINAMAZ</span>
+    <Link href={href} className={cn("inline-flex w-fit items-center", dark && "rounded-xl bg-white px-3 py-1.5", className)} aria-label="Vinamaz Travels home">
+      <Image src="/brand/logo-sm.png" alt="Vinamaz Travels" width={379} height={120} priority className="h-10 w-auto sm:h-12" />
     </Link>
   );
 }

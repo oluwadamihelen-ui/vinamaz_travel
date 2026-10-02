@@ -58,12 +58,14 @@ function z_fieldErrors(error: { issues: { path: PropertyKey[]; message: string }
  * Load the current user fresh from the database (never trust claims in the session
  * token for authorization). Returns null if the account is missing or disabled.
  */
-export async function loadActor(userId: string): Promise<Actor | null> {
+export async function loadActor(userId: string, sessionIssuedAtSec?: number): Promise<Actor | null> {
   const user = await db.user.findUnique({
     where: { id: userId },
-    select: { id: true, email: true, name: true, role: true, permissions: true, isActive: true },
+    select: { id: true, email: true, name: true, role: true, permissions: true, isActive: true, passwordChangedAt: true },
   });
   if (!user || !user.isActive) return null;
+  // A password reset signs out every session issued before it.
+  if (user.passwordChangedAt && sessionIssuedAtSec !== undefined && sessionIssuedAtSec < Math.floor(user.passwordChangedAt.getTime() / 1000)) return null;
   return { id: user.id, email: user.email, name: user.name, role: user.role, permissions: user.permissions };
 }
 

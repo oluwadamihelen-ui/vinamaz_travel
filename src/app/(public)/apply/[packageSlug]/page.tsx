@@ -41,7 +41,7 @@ export default async function ApplyPage({ params }: Props) {
           <form action={startApplicationAction.bind(null, pkg.slug)} className="mt-8"><Button size="lg">Begin application</Button></form>
         </>
       )}
-      <p className="mt-6"><Link href={`/packages/${pkg.slug}`} className="text-sm font-medium text-teal hover:underline">Back to package details</Link></p>
+      <p className="mt-6"><Link href={`/packages/${pkg.slug}`} className="text-sm font-medium text-brand hover:underline">Back to package details</Link></p>
     </section>
   );
 }

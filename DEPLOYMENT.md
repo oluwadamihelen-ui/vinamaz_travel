@@ -24,7 +24,9 @@ Production branch: set to the branch you want live (this work is on `claude/vina
 | `AUTH_SECRET` | `openssl rand -base64 32` |
 | `NEXT_PUBLIC_APP_URL` | `https://<your-domain>` |
 | `BLOB_READ_WRITE_TOKEN` | the private Blob store token (added by Vercel when you connect the store) |
-| `PAYSTACK_SECRET_KEY`, `RESEND_API_KEY`, `EMAIL_FROM` | Phase 4/5 - not used yet |
+| `RESEND_API_KEY` | Resend API key - **required for password reset emails** |
+| `EMAIL_FROM` | e.g. `Vinamaz Travels <no-reply@vinamaz.com>` - the domain must be verified in Resend |
+| `PAYSTACK_SECRET_KEY` | Phase 4 - not used yet |
 
 `AUTH_TRUST_HOST` is not needed on Vercel. Do **not** set `ALLOW_LOCAL_PRIVATE_STORAGE` in production.
 
@@ -50,3 +52,11 @@ open `/admin/packages`, fill in real package details and upload artwork, then ac
 - Document uploads are proxied through a serverless function, so each file is capped at ~4MB
   (Vercel's request-body limit); phone photos are compressed client-side. Move to Blob client uploads if larger PDFs are needed.
 - The rate limiter is in-memory per instance; add Upstash/Vercel KV before launch.
+
+## Email (password reset)
+Password reset sends an email through Resend. Without `RESEND_API_KEY` in production no email is sent
+(the page still says "if an account exists..." by design, and the failure is logged as `[email] failed to send`).
+1. Create a Resend account, add and verify your sending domain (DNS records), create an API key.
+2. Set `RESEND_API_KEY` and `EMAIL_FROM` in Vercel (Production) and redeploy.
+   Until the domain is verified, Resend only delivers to your own account email using `onboarding@resend.dev`.
+Reset links work once and expire after 60 minutes. Resetting a password also signs out all older sessions.

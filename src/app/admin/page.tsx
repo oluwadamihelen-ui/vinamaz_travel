@@ -14,7 +14,7 @@ export default async function AdminHome({ searchParams }: { searchParams: Promis
       <h1 className="text-3xl font-semibold">Staff portal</h1>
       {denied && <Alert>You don&rsquo;t have permission to open that page.</Alert>}
       <p className="text-ink-3">Your account has no administrative areas enabled yet. Ask an administrator to grant you access.</p>
-      {can(actor, "packages.view") && <Link className="font-semibold text-teal" href="/admin/packages">Go to packages</Link>}
+      {can(actor, "packages.view") && <Link className="font-semibold text-brand" href="/admin/packages">Go to packages</Link>}
     </div>
   );
 }

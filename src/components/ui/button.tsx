@@ -8,11 +8,11 @@ export const buttonVariants = cva(
   {
     variants: {
       variant: {
-        primary: "bg-ink text-white hover:bg-ink-2 shadow-sm",
+        primary: "bg-brand text-white hover:bg-brand-2 shadow-sm",
         gold: "bg-gold-bright text-ink hover:bg-[#e0b25f] shadow-sm",
         outline: "border border-ink/20 bg-white/60 text-ink hover:border-ink/50 hover:bg-white",
         ghost: "text-ink hover:bg-ink/5",
-        danger: "bg-danger text-white hover:bg-[#8f1c12]",
+        danger: "bg-ink text-white hover:bg-ink-2",
         onDark: "border border-white/30 text-white hover:bg-white/10",
       },
       size: { sm: "h-10 px-4 text-sm", md: "h-12 px-6 text-[15px]", lg: "h-14 px-8 text-base" },

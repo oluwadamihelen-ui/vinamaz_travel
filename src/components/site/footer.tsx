@@ -30,7 +30,7 @@ export function SiteFooter() {
         </div>
       </div>
       <div className="border-t border-white/10 px-5 py-5 text-center text-xs text-white/50">
-        © {new Date().getFullYear()} Vinamaz. Vinamaz is not a government agency and does not guarantee visa approval.
+        © {new Date().getFullYear()} Vinamaz Travels. Vinamaz Travels is not a government agency and does not guarantee visa approval.
       </div>
     </footer>
   );

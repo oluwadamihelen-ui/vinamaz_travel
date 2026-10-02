@@ -1,17 +1,19 @@
 @import "tailwindcss";
 
 @theme {
-  --color-ink: #0b1b33;
-  --color-ink-2: #16305a;
-  --color-ink-3: #3b4f6e;
-  --color-paper: #faf8f4;
-  --color-sand: #f1ece2;
-  --color-line: #e3dccd;
-  --color-gold: #a97a2c;
-  --color-gold-bright: #d4a24c;
-  --color-gold-soft: #f5ead2;
-  --color-teal: #1b6b7a;
-  --color-teal-soft: #dcecef;
+  /* Vinamaz Travels brand: crimson + gold from the logo, on warm neutrals */
+  --color-brand: #b01012;
+  --color-brand-2: #8a0a0c;
+  --color-brand-soft: #fbeae9;
+  --color-ink: #2b0b0e;
+  --color-ink-2: #4a1519;
+  --color-ink-3: #665557;
+  --color-paper: #fcf9f5;
+  --color-sand: #f5eee6;
+  --color-line: #eadfd2;
+  --color-gold: #a86f0a;
+  --color-gold-bright: #d99a1c;
+  --color-gold-soft: #faedd0;
   --color-danger: #b42318;
   --color-danger-soft: #fdecea;
   --color-ok: #1d7a4d;
@@ -20,8 +22,8 @@
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-display: var(--font-fraunces), ui-serif, Georgia, serif;
 
-  --shadow-card: 0 1px 2px rgb(11 27 51 / 0.05), 0 8px 24px -12px rgb(11 27 51 / 0.18);
-  --shadow-lift: 0 2px 4px rgb(11 27 51 / 0.06), 0 22px 40px -18px rgb(11 27 51 / 0.32);
+  --shadow-card: 0 1px 2px rgb(43 11 14 / 0.05), 0 8px 24px -12px rgb(43 11 14 / 0.18);
+  --shadow-lift: 0 2px 4px rgb(43 11 14 / 0.06), 0 22px 40px -18px rgb(43 11 14 / 0.34);
 }
 
 html { scroll-behavior: smooth; }
@@ -32,7 +34,7 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 h1, h2, h3 { font-family: var(--font-display); letter-spacing: -0.01em; }
-:focus-visible { outline: 2px solid var(--color-teal); outline-offset: 2px; }
+:focus-visible { outline: 2px solid var(--color-brand); outline-offset: 2px; }
 
 @keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
 .rise { animation: rise 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
@@ -43,7 +45,7 @@ h1, h2, h3 { font-family: var(--font-display); letter-spacing: -0.01em; }
 /* Fine topographic / route-line texture used on dark hero surfaces */
 .route-bg {
   background-image:
-    radial-gradient(60% 80% at 85% 0%, rgb(212 162 76 / 0.16), transparent 60%),
-    radial-gradient(50% 70% at 0% 100%, rgb(27 107 122 / 0.28), transparent 65%),
+    radial-gradient(60% 80% at 85% 0%, rgb(217 154 28 / 0.18), transparent 60%),
+    radial-gradient(55% 75% at 0% 100%, rgb(176 16 18 / 0.34), transparent 65%),
     repeating-linear-gradient(115deg, rgb(255 255 255 / 0.035) 0 1px, transparent 1px 28px);
 }

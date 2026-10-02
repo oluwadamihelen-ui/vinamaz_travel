@@ -11,7 +11,7 @@ export const getActor = cache(async (): Promise<Actor | null> => {
   const session = await auth();
   const id = session?.user?.id;
   if (!id) return null;
-  return loadActor(id);
+  return loadActor(id, session.issuedAt);
 });
 
 export async function requireActorPage(next?: string): Promise<Actor> {

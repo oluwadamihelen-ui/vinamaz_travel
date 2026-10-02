@@ -71,7 +71,7 @@ export default async function HomePage() {
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-gold">Available destinations</p>
             <h2 className="mt-2 text-3xl font-semibold sm:text-4xl">Travel packages</h2>
           </div>
-          {all.length > 0 && <Link href="/packages" className="inline-flex items-center gap-1.5 text-sm font-semibold text-teal hover:underline">View all packages <ArrowRight className="size-4" /></Link>}
+          {all.length > 0 && <Link href="/packages" className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand hover:underline">View all packages <ArrowRight className="size-4" /></Link>}
         </div>
         {all.length ? (
           <div className="grid gap-7 sm:grid-cols-2 lg:grid-cols-3">{all.map((p) => <PackageCard key={p.id} pkg={p} />)}</div>
@@ -87,7 +87,7 @@ export default async function HomePage() {
             {STEPS.map((s) => (
               <li key={s.n} className="relative rounded-3xl border border-line bg-white p-6 shadow-card">
                 <span className="font-display text-5xl font-semibold text-gold-bright/70">{s.n}</span>
-                <s.icon className="mt-4 size-6 text-teal" aria-hidden />
+                <s.icon className="mt-4 size-6 text-brand" aria-hidden />
                 <h3 className="mt-3 text-xl font-semibold">{s.title}</h3>
                 <p className="mt-2 text-[15px] leading-relaxed text-ink-3">{s.body}</p>
               </li>
@@ -103,7 +103,7 @@ export default async function HomePage() {
         <div className="mt-12 grid gap-8 sm:grid-cols-2">
           {WHY.map((w) => (
             <div key={w.title} className="flex gap-5">
-              <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-teal-soft text-teal"><w.icon className="size-6" aria-hidden /></span>
+              <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-brand-soft text-brand"><w.icon className="size-6" aria-hidden /></span>
               <div>
                 <h3 className="text-xl font-semibold">{w.title}</h3>
                 <p className="mt-1.5 text-[15px] leading-relaxed text-ink-3">{w.body}</p>

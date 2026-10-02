@@ -18,10 +18,10 @@ export const STATUS_LABEL: Record<ApplicationStatus, string> = {
   CANCELLED: "Cancelled",
 };
 
-export const STATUS_TONE: Record<ApplicationStatus, "neutral" | "gold" | "teal" | "ok" | "danger"> = {
-  DRAFT: "neutral", APPLICATION_SUBMITTED: "teal", PAYMENT_PENDING: "gold", PAYMENT_CONFIRMED: "teal", UNDER_REVIEW: "teal",
-  DOCUMENTS_REQUIRED: "gold", DOCUMENTS_UNDER_REVIEW: "teal", PROCESSING: "teal", ADDITIONAL_INFORMATION_REQUIRED: "gold",
-  SUBMITTED_TO_AUTHORITY: "teal", DECISION_PENDING: "teal", APPROVED: "ok", REFUSED: "danger", COMPLETED: "ok", CANCELLED: "neutral",
+export const STATUS_TONE: Record<ApplicationStatus, "neutral" | "gold" | "info" | "ok" | "danger"> = {
+  DRAFT: "neutral", APPLICATION_SUBMITTED: "info", PAYMENT_PENDING: "gold", PAYMENT_CONFIRMED: "info", UNDER_REVIEW: "info",
+  DOCUMENTS_REQUIRED: "gold", DOCUMENTS_UNDER_REVIEW: "info", PROCESSING: "info", ADDITIONAL_INFORMATION_REQUIRED: "gold",
+  SUBMITTED_TO_AUTHORITY: "info", DECISION_PENDING: "info", APPROVED: "ok", REFUSED: "danger", COMPLETED: "ok", CANCELLED: "neutral",
 };
 
 export const DOC_STATUS_LABEL: Record<DocumentStatus, string> = {
@@ -32,6 +32,6 @@ export const DOC_STATUS_LABEL: Record<DocumentStatus, string> = {
   REPLACEMENT_REQUIRED: "Replacement required",
 };
 
-export const DOC_STATUS_TONE: Record<DocumentStatus, "neutral" | "gold" | "teal" | "ok" | "danger"> = {
-  UPLOADED: "teal", UNDER_REVIEW: "teal", APPROVED: "ok", REJECTED: "danger", REPLACEMENT_REQUIRED: "gold",
+export const DOC_STATUS_TONE: Record<DocumentStatus, "neutral" | "gold" | "info" | "ok" | "danger"> = {
+  UPLOADED: "info", UNDER_REVIEW: "info", APPROVED: "ok", REJECTED: "danger", REPLACEMENT_REQUIRED: "gold",
 };

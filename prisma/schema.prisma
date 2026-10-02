@@ -30,25 +30,28 @@ enum Role {
 /// One account table for clients and staff. Authorization = role defaults
 /// (see src/lib/auth/permissions.ts) + per-user extra grants in `permissions`.
 model User {
-  id              String    @id @default(cuid())
+  id                String    @id @default(cuid())
   /// Always stored lower-cased and trimmed.
-  email           String    @unique
-  name            String
-  phone           String?
-  passwordHash    String
-  role            Role      @default(CLIENT)
+  email             String    @unique
+  name              String
+  phone             String?
+  passwordHash      String
+  role              Role      @default(CLIENT)
   /// Additional permission keys granted to this user on top of the role defaults
   /// (primarily used for STAFF). Validated against the permission catalogue in code.
-  permissions     String[]  @default([])
-  isActive        Boolean   @default(true)
-  emailVerifiedAt DateTime?
-  lastLoginAt     DateTime?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  permissions       String[]  @default([])
+  isActive          Boolean   @default(true)
+  emailVerifiedAt   DateTime?
+  lastLoginAt       DateTime?
+  /// Set when the password is reset. Sessions issued before this moment are rejected.
+  passwordChangedAt DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
-  clientProfile ClientProfile?
-  auditLogs     AuditLog[]
-  applications  VisaApplication[]
+  clientProfile       ClientProfile?
+  auditLogs           AuditLog[]
+  applications        VisaApplication[]
+  passwordResetTokens PasswordResetToken[]
 
   @@index([role, isActive])
   @@index([createdAt])
@@ -386,4 +389,20 @@ model ApplicationDocument {
 
   @@index([applicationId, requirementKey, isCurrent])
   @@index([status, createdAt])
+}
+
+/// Single-use password reset tokens. Only the SHA-256 hash is stored; the raw token exists only
+/// in the emailed link. Tokens expire after 1 hour and are invalidated when a new one is issued.
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, usedAt])
+  @@index([expiresAt])
 }
