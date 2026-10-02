@@ -7,12 +7,10 @@ so each deploy applies pending database migrations before building.
 1. **Neon** project -> copy both connection strings:
    - pooled (host contains `-pooler`) -> `DATABASE_URL`
    - direct (no `-pooler`) -> `DIRECT_URL` (used only by `prisma migrate`)
-2. **Vercel Blob** (Storage tab) - create **two** stores:
-   - a **public** store (package marketing images) -> `BLOB_READ_WRITE_TOKEN`
-   - a **private** store (applicant documents) -> `PRIVATE_BLOB_READ_WRITE_TOKEN`
-
-   Applicant documents must only ever be in the private store. (Confirm store access types in the
-   Vercel dashboard; the code uses `access: "private"` for documents and `"public"` for package images.)
+2. **Vercel Blob** (Storage tab) - create **one private** store and connect it to the project. Vercel adds
+   `BLOB_READ_WRITE_TOKEN` automatically. It holds applicant documents (served only through the authorised
+   download route) and package artwork (served through `/api/package-images/...`, which can only read the
+   `package-images/` folder). `PRIVATE_BLOB_READ_WRITE_TOKEN` is optional and, if set, takes precedence.
 
 ## 2. Import the repository
 Vercel dashboard -> *Add New Project* -> import `oluwadamihelen-ui/vinamaz_travel`. Framework: Next.js (auto).
@@ -25,8 +23,7 @@ Production branch: set to the branch you want live (this work is on `claude/vina
 | `DIRECT_URL` | Neon direct URL |
 | `AUTH_SECRET` | `openssl rand -base64 32` |
 | `NEXT_PUBLIC_APP_URL` | `https://<your-domain>` |
-| `BLOB_READ_WRITE_TOKEN` | public store token |
-| `PRIVATE_BLOB_READ_WRITE_TOKEN` | private store token |
+| `BLOB_READ_WRITE_TOKEN` | the private Blob store token (added by Vercel when you connect the store) |
 | `PAYSTACK_SECRET_KEY`, `RESEND_API_KEY`, `EMAIL_FROM` | Phase 4/5 - not used yet |
 
 `AUTH_TRUST_HOST` is not needed on Vercel. Do **not** set `ALLOW_LOCAL_PRIVATE_STORAGE` in production.

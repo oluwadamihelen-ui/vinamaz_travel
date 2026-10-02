@@ -8,7 +8,9 @@ import { del, get, put } from "@vercel/blob";
 /**
  * PRIVATE storage for applicant documents (passports, bank statements, ...).
  *
- *  - Production: a Vercel Blob *private* store, configured via PRIVATE_BLOB_READ_WRITE_TOKEN.
+ *  - Production: a Vercel Blob *private* store, configured via PRIVATE_BLOB_READ_WRITE_TOKEN
+ *    (falls back to BLOB_READ_WRITE_TOKEN, which is what Vercel injects when a store is connected).
+ *    If that token belonged to a public store, writes with access "private" would fail rather than leak.
  *    Objects have no public URL; bytes are only ever streamed through our authorised
  *    download route (src/app/api/documents/[id]/route.ts).
  *  - Development/tests only: the local filesystem under PRIVATE_STORAGE_DIR (default
@@ -28,10 +30,12 @@ export interface PrivateStorage {
   delete(key: string): Promise<void>;
 }
 
-const KEY_RE = /^applications\/[a-z0-9]+\/[a-f0-9-]{36}\.(pdf|jpg|png)$/;
+const DOCUMENT_KEY_RE = /^applications\/[a-z0-9]+\/[a-f0-9-]{36}\.(pdf|jpg|png)$/;
+/** Public marketing images (package artwork) share the store but live under their own prefix. */
+export const PACKAGE_IMAGE_KEY_RE = /^package-images\/[a-f0-9-]{36}\.(jpg|png|webp)$/;
 
 function assertKey(key: string) {
-  if (!KEY_RE.test(key)) throw new Error("Invalid storage key");
+  if (!DOCUMENT_KEY_RE.test(key) && !PACKAGE_IMAGE_KEY_RE.test(key)) throw new Error("Invalid storage key");
 }
 
 class VercelPrivateStorage implements PrivateStorage {
@@ -70,7 +74,7 @@ class LocalPrivateStorage implements PrivateStorage {
     try {
       const s = await stat(f);
       const ext = path.extname(f).slice(1);
-      const contentType = ext === "pdf" ? "application/pdf" : ext === "png" ? "image/png" : "image/jpeg";
+      const contentType = ext === "pdf" ? "application/pdf" : ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : "image/jpeg";
       return { stream: Readable.toWeb(createReadStream(f)) as ReadableStream<Uint8Array>, contentType, size: s.size };
     } catch {
       return null;
@@ -89,10 +93,10 @@ let instance: PrivateStorage | undefined;
 
 export function getPrivateStorage(): PrivateStorage {
   if (instance) return instance;
-  const token = process.env.PRIVATE_BLOB_READ_WRITE_TOKEN;
+  const token = process.env.PRIVATE_BLOB_READ_WRITE_TOKEN || process.env.BLOB_READ_WRITE_TOKEN;
   if (token) return (instance = new VercelPrivateStorage(token));
   if (process.env.NODE_ENV === "production" && !process.env.ALLOW_LOCAL_PRIVATE_STORAGE) {
-    throw new Error("Private document storage is not configured (PRIVATE_BLOB_READ_WRITE_TOKEN).");
+    throw new Error("Private storage is not configured (set BLOB_READ_WRITE_TOKEN or PRIVATE_BLOB_READ_WRITE_TOKEN).");
   }
   return (instance = new LocalPrivateStorage(path.resolve(process.env.PRIVATE_STORAGE_DIR ?? ".data/private-documents")));
 }

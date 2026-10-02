@@ -78,6 +78,8 @@ test("admin creates an active package, it appears publicly, then is deactivated"
   await page.getByLabel("Short description").fill("A package created by the end-to-end test.");
   await page.getByLabel("What's included").fill("Document checklist\nApplication review");
   await page.getByLabel("Status").selectOption("ACTIVE");
+  const PNG_1x1 = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64");
+  await page.getByLabel("Upload image").setInputFiles({ name: "art.png", mimeType: "image/png", buffer: PNG_1x1 });
   await page.getByRole("button", { name: "Create package" }).click();
   await expect(page.getByText("Package saved.")).toBeVisible();
 
@@ -87,6 +89,11 @@ test("admin creates an active package, it appears publicly, then is deactivated"
   await expect(page.getByRole("heading", { level: 1 })).toContainText(name);
   await expect(page.getByText("Document checklist")).toBeVisible();
   await expect(page.getByText(/Package price/)).toHaveCount(0); // no price configured => not shown
+  const imgSrc = await page.locator("main img").first().getAttribute("src");
+  expect(imgSrc).toContain("package-images");
+  const imgRes = await page.request.get(decodeURIComponent(imgSrc!.match(/url=([^&]+)/)?.[1] ?? imgSrc!));
+  expect(imgRes.status()).toBe(200);
+  expect(imgRes.headers()["content-type"]).toBe("image/png");
 
   await page.goto("/admin/packages");
   await page.getByText(name, { exact: true }).locator("xpath=ancestor::div[contains(@class,'p-5')][1]").getByRole("button", { name: "Deactivate" }).click();
